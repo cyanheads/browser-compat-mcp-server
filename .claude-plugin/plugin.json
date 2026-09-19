@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "browser-compat-mcp-server",
+  "version": "0.1.0",
+  "description": "Browser compatibility and Baseline status for any web feature — offline, from MDN's browser-compat-data, web-features, and caniuse. STDIO or Streamable HTTP.",
+  "author": {
+    "name": "cyanheads",
+    "email": "casey@caseyjhand.com",
+    "url": "https://github.com/cyanheads"
+  },
+  "homepage": "https://github.com/cyanheads/browser-compat-mcp-server#readme",
+  "repository": "https://github.com/cyanheads/browser-compat-mcp-server.git",
+  "license": "Apache-2.0",
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "browser-compat",
+    "baseline",
+    "web-features",
+    "caniuse",
+    "browserslist"
+  ],
+  "mcpServers": {
+    "browser-compat-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@cyanheads/browser-compat-mcp-server"
+      ],
+      "env": {
+        "MCP_TRANSPORT_TYPE": "stdio"
+      }
+    }
+  }
+}

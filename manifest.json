@@ -1,0 +1,35 @@
+{
+  "manifest_version": "0.3",
+  "name": "browser-compat-mcp-server",
+  "version": "0.1.0",
+  "description": "Browser compatibility and Baseline status for any web feature — offline, from MDN's browser-compat-data, web-features, and caniuse. STDIO or Streamable HTTP.",
+  "author": {
+    "name": "cyanheads"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/dist/index.js"],
+      "env": {
+        "MCP_TRANSPORT_TYPE": "stdio",
+        "MCP_AUTH_MODE": "none",
+        "NODE_ENV": "production"
+      }
+    }
+  },
+  "compatibility": {
+    "runtimes": {
+      "node": ">=24.0.0"
+    }
+  },
+  "tools_generated": true,
+  "prompts_generated": true,
+  "user_config": {},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cyanheads/browser-compat-mcp-server"
+  },
+  "homepage": "https://github.com/cyanheads/browser-compat-mcp-server#readme"
+}
