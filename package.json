@@ -1,6 +1,6 @@
 {
   "name": "@cyanheads/browser-compat-mcp-server",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "mcpName": "io.github.cyanheads/browser-compat-mcp-server",
   "description": "Browser compatibility and Baseline status for any web feature — offline, from MDN's browser-compat-data, web-features, and caniuse. STDIO or Streamable HTTP.",
   "type": "module",
