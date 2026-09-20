@@ -143,6 +143,44 @@ describe('browsercompat_compare_support — verdicts', () => {
   });
 });
 
+describe('browsercompat_compare_support — every token unchecked, none unmapped', () => {
+  it('a single mapped agent with an unresolvable version is an ordinary response, not an error', async () => {
+    const { result } = await run(['css.selectors.has'], 'safari TP');
+    expect(result.query_echo).toBe('safari TP');
+    expect(result.targets_resolved).toEqual([]);
+    expect(result.unchecked_targets).toEqual([
+      expect.objectContaining({ agent: 'safari', version_token: 'TP', reason: 'unknown_version' }),
+    ]);
+  });
+
+  it('every feature is inconclusive when no target was evaluated — never a vacuous clears', async () => {
+    const { result } = await run(['css.selectors.has', 'nope-xyz', 'grid'], 'safari TP');
+    expect(result.results.map((r) => r.verdict)).toEqual(['inconclusive', 'miss', 'ambiguous']);
+    expect(result.results[0]?.failing_targets).toEqual([]);
+    expect(result.all_clear).toBe(false);
+    expect(result.target_coverage_percent).toBe(0);
+  });
+
+  it('a mix of unmapped agent and unresolvable version keeps both per-token reasons', async () => {
+    const { result } = await run(['css.selectors.has'], 'safari TP, op_mini all');
+    expect(
+      result.unchecked_targets.map((t) => `${t.agent} ${t.version_token} ${t.reason}`).sort(),
+    ).toEqual(['op_mini all no_bcd_browser', 'safari TP unknown_version']);
+    expect(result.results[0]?.verdict).toBe('inconclusive');
+    expect(result.all_clear).toBe(false);
+  });
+
+  it('conforms to the declared output schema', async () => {
+    const { result } = await run(['css.selectors.has'], 'safari TP');
+    expect(result).toEqual(expect.schemaMatching(browsercompatCompareSupport.output));
+  });
+
+  it('uncheckedNotice still names the agents that went unevaluated', async () => {
+    const { ctx } = await run(['css.selectors.has'], 'safari TP');
+    expect(getEnrichment(ctx).uncheckedNotice).toContain('safari');
+  });
+});
+
 describe('browsercompat_compare_support — resolve: true', () => {
   it('resolves an unambiguous punctuated alias per-entry', async () => {
     const { result } = await run([':has()'], 'chrome 120', true);
@@ -178,7 +216,7 @@ describe('browsercompat_compare_support — errors', () => {
     });
   });
 
-  it('no_targets_resolved fires when every token maps to an agent with no BCD counterpart', async () => {
+  it('no_targets_resolved names the unmapped agents when every token maps to one', async () => {
     const ctx = createMockContext({ errors: browsercompatCompareSupport.errors });
     const input = browsercompatCompareSupport.input.parse({
       features: ['has'],
@@ -187,10 +225,23 @@ describe('browsercompat_compare_support — errors', () => {
     await expect(browsercompatCompareSupport.handler(input, ctx)).rejects.toMatchObject({
       code: JsonRpcErrorCode.ValidationError,
       data: { reason: 'no_targets_resolved' },
+      message: expect.stringContaining('no browser-compat-data counterpart: op_mini'),
     });
   });
 
-  it('invalid_feature_input fires for a whitespace-only entry', async () => {
+  it('no_targets_resolved says the query matched nothing when browserslist yields no tokens', async () => {
+    const ctx = createMockContext({ errors: browsercompatCompareSupport.errors });
+    const input = browsercompatCompareSupport.input.parse({
+      features: ['has'],
+      targets: '> 100%',
+    });
+    await expect(browsercompatCompareSupport.handler(input, ctx)).rejects.toMatchObject({
+      data: { reason: 'no_targets_resolved' },
+      message: expect.stringContaining('matched no browser versions'),
+    });
+  });
+
+  it('invalid_feature_input fires for a whitespace-only entry and names that case in the hint', async () => {
     const ctx = createMockContext({ errors: browsercompatCompareSupport.errors });
     const input = browsercompatCompareSupport.input.parse({
       features: ['has', ' '],
@@ -198,7 +249,10 @@ describe('browsercompat_compare_support — errors', () => {
     });
     await expect(browsercompatCompareSupport.handler(input, ctx)).rejects.toMatchObject({
       code: JsonRpcErrorCode.ValidationError,
-      data: { reason: 'invalid_feature_input' },
+      data: {
+        reason: 'invalid_feature_input',
+        recovery: { hint: expect.stringContaining('whitespace-only') },
+      },
     });
   });
 
@@ -218,6 +272,25 @@ describe('browsercompat_compare_support — errors', () => {
         targets: 'defaults',
       }).success,
     ).toBe(false);
+  });
+
+  it('rejects an empty and an over-200-character entry at the schema boundary', () => {
+    expect(
+      browsercompatCompareSupport.input.safeParse({ features: ['has', ''], targets: 'defaults' })
+        .success,
+    ).toBe(false);
+    expect(
+      browsercompatCompareSupport.input.safeParse({
+        features: ['a'.repeat(201)],
+        targets: 'defaults',
+      }).success,
+    ).toBe(false);
+    expect(
+      browsercompatCompareSupport.input.safeParse({
+        features: ['a'.repeat(200)],
+        targets: 'defaults',
+      }).success,
+    ).toBe(true);
   });
 });
 
@@ -264,6 +337,17 @@ describe('browsercompat_compare_support — format()', () => {
     const blocks = browsercompatCompareSupport.format?.(result);
     const text = (blocks?.[0] as { text: string } | undefined)?.text;
     expect(text).toContain('Every resolved target was evaluated.');
+  });
+
+  it('renders the no-target-evaluated case with the per-token reason, not an empty table', async () => {
+    const { result } = await run(['css.selectors.has'], 'safari TP');
+    const blocks = browsercompatCompareSupport.format?.(result);
+    const text = (blocks?.[0] as { text: string } | undefined)?.text;
+    expect(text).toContain('# 0 of 1 features clears `safari TP`');
+    expect(text).toContain('**inconclusive**');
+    expect(text).toContain('## Targets evaluated');
+    expect(text).toContain('No target version was evaluated.');
+    expect(text).toContain('| safari TP | unknown_version |');
   });
 
   it('renders compat_keys and guidance for an ambiguous result', async () => {

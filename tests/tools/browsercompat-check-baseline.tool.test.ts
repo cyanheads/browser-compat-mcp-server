@@ -170,12 +170,27 @@ describe('browsercompat_check_baseline — schema and error boundaries', () => {
     ).toBe(true);
   });
 
-  it('throws invalid_feature_input for a whitespace-only entry', async () => {
+  it('rejects an empty and an over-200-character entry at the schema boundary', () => {
+    expect(browsercompatCheckBaseline.input.safeParse({ features: ['has', ''] }).success).toBe(
+      false,
+    );
+    expect(
+      browsercompatCheckBaseline.input.safeParse({ features: ['a'.repeat(201)] }).success,
+    ).toBe(false);
+    expect(
+      browsercompatCheckBaseline.input.safeParse({ features: ['a'.repeat(200)] }).success,
+    ).toBe(true);
+  });
+
+  it('throws invalid_feature_input for a whitespace-only entry and names that case in the hint', async () => {
     const ctx = createMockContext({ errors: browsercompatCheckBaseline.errors });
     const input = browsercompatCheckBaseline.input.parse({ features: ['has', '  '] });
     await expect(browsercompatCheckBaseline.handler(input, ctx)).rejects.toMatchObject({
       code: JsonRpcErrorCode.ValidationError,
-      data: { reason: 'invalid_feature_input' },
+      data: {
+        reason: 'invalid_feature_input',
+        recovery: { hint: expect.stringContaining('whitespace-only') },
+      },
     });
   });
 });

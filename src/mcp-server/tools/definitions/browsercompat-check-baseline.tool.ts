@@ -85,11 +85,11 @@ export const browsercompatCheckBaseline = tool('browsercompat_check_baseline', {
 
   input: z.object({
     features: z
-      .array(z.string())
+      .array(z.string().min(1).max(200))
       .min(1)
       .max(20)
       .describe(
-        'Up to 20 entries, each a browser-compat-data key such as css.selectors.has or a web-features id such as has. Call browsercompat_search_features first for any entry whose key you do not already know.',
+        'Up to 20 entries, each a browser-compat-data key such as css.selectors.has or a web-features id such as has, 1 to 200 characters. An empty or longer entry is rejected against this schema; a whitespace-only entry returns invalid_feature_input. Call browsercompat_search_features first for any entry whose key you do not already know.',
       ),
     resolve: z
       .boolean()
@@ -133,9 +133,9 @@ export const browsercompatCheckBaseline = tool('browsercompat_check_baseline', {
     {
       reason: 'invalid_feature_input',
       code: JsonRpcErrorCode.ValidationError,
-      when: 'An entry in features is empty or whitespace-only.',
+      when: 'An entry in features is whitespace-only. An empty or over-200-character entry is rejected against the input schema instead.',
       recovery:
-        'Remove the empty entry. Each item is a BCD key such as css.selectors.has or a web-features id such as has; use browsercompat_search_features to find one.',
+        'Replace the whitespace-only entry with a BCD key such as css.selectors.has or a web-features id such as has; use browsercompat_search_features to find one.',
     },
   ],
 
@@ -146,7 +146,7 @@ export const browsercompatCheckBaseline = tool('browsercompat_check_baseline', {
     if (input.features.some((entry) => entry.trim().length === 0)) {
       throw ctx.fail(
         'invalid_feature_input',
-        'One or more entries in features are empty or whitespace-only.',
+        'One or more entries in features are whitespace-only.',
         { ...ctx.recoveryFor('invalid_feature_input') },
       );
     }

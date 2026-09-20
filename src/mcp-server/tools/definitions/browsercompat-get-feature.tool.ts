@@ -50,7 +50,7 @@ export const browsercompatGetFeature = tool('browsercompat_get_feature', {
       .min(1)
       .max(200)
       .describe(
-        'A browser-compat-data key such as css.selectors.has, or a web-features id such as has. Maximum 200 characters. Call browsercompat_search_features first if you do not already know the key.',
+        'A browser-compat-data key such as css.selectors.has, or a web-features id such as has, 1 to 200 characters. An empty or longer string is rejected against this schema; a whitespace-only string returns invalid_feature_input. Call browsercompat_search_features first if you do not already know the key.',
       ),
     resolve: z
       .boolean()
@@ -134,7 +134,7 @@ export const browsercompatGetFeature = tool('browsercompat_get_feature', {
     {
       reason: 'invalid_feature_input',
       code: JsonRpcErrorCode.ValidationError,
-      when: 'feature is empty, whitespace-only, or longer than 200 characters.',
+      when: 'feature is whitespace-only. An empty or over-200-character string is rejected against the input schema instead.',
       recovery:
         'Pass a BCD key such as css.selectors.has or a web-features id such as has, then call browsercompat_search_features if you do not know the key.',
     },

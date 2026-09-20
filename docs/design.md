@@ -230,7 +230,7 @@ These seven rules are shared by every tool. Implement them once in the service l
 
 Every tool takes the same `feature` string and resolves it in a fixed order. BCD keys always contain a dot and web-features ids never do (verified: 0 of 1,203 ids contain a dot, 0 BCD leaf paths are a single segment, and no leaf path equals an id), so the namespaces cannot collide.
 
-1. Trim. Empty or over 200 characters → `invalid_feature_input`.
+1. Trim. The bound is enforced before the resolver runs, split across two surfaces: the input schema rejects an empty or over-200-character string by name, and a whitespace-only string — the one case a length validator cannot express — reaches the handler as `invalid_feature_input`. Enforcing either bound in both places would leave the contract entry unreachable while still reading as covered.
 2. **Exact BCD key**, case-sensitive, against the 20,517-key leaf index.
 3. **Exact web-features id**, case-sensitive, against the 1,203 ids.
 4. **Lowercased retry of step 3 only.** All web-features ids match `^[a-z0-9-]+$`, so lowercasing is unambiguous there. It is *not* applied to BCD keys: four pairs collide case-insensitively — `api.Crypto`/`api.crypto`, `api.Origin`/`api.origin`, `api.Performance`/`api.performance`, `api.Scheduler`/`api.scheduler`.
@@ -290,7 +290,7 @@ resolved_as: {
 | `preview_only` | the only applicable statement is `version_added: 'preview'` |
 | `unknown` | browser absent from `support`; or `≤X` with the target before X; or the target version was unresolvable |
 
-**Pass rule for `compare_support`:** a feature clears the targets only when every resolved target browser/version returns `supported`. `partial`, `prefixed`, `flagged`, `preview_only`, `removed`, and `unsupported` all fail. `unknown` neither passes nor fails — the target moves to `unchecked_targets` with reason `no_bcd_data` and the feature verdict becomes `inconclusive`.
+**Pass rule for `compare_support`:** a feature clears the targets only when every resolved target browser/version returns `supported`. `partial`, `prefixed`, `flagged`, `preview_only`, `removed`, and `unsupported` all fail. `unknown` neither passes nor fails — the target moves to `unchecked_targets` with reason `no_bcd_data` and the feature verdict becomes `inconclusive`. A query that resolves no target at all is `inconclusive` for the same reason: with nothing evaluated, "every resolved target returned `supported`" is vacuously true, and reporting `clears` off it would claim a verdict the server never computed.
 
 ### 3. Reported browser set
 
@@ -434,7 +434,7 @@ The 80% tool.
 
 | Param | Type | Maps to | Notes |
 |:------|:-----|:--------|:------|
-| `feature` | `string` (1–200), required | resolver | BCD key or web-features id |
+| `feature` | `string` (1–200), required | resolver | BCD key or web-features id. The length bound is a schema constraint, so an empty or over-long string is rejected by name (Core Mechanics §1). |
 | `resolve` | `boolean`, default `false` | resolver step 6 | Enables the single-best-search-hit fallback. Off by default so a typo returns a miss the agent can correct rather than a confidently wrong feature. |
 | `include_runtimes` | `boolean`, default `false` | reported browser set | Adds `bun`, `deno`, `nodejs`, `oculus`. Leave off for browser ship decisions. |
 
@@ -488,7 +488,7 @@ Spec: <url>
 
 | reason | code | when | recovery |
 |:-------|:-----|:-----|:---------|
-| `invalid_feature_input` | `ValidationError` | `feature` is empty, whitespace-only, or longer than 200 characters | `Pass a BCD key such as css.selectors.has or a web-features id such as has, then call browsercompat_search_features if you do not know the key.` |
+| `invalid_feature_input` | `ValidationError` | `feature` is whitespace-only. An empty or over-200-character string is rejected against the input schema instead | `Pass a BCD key such as css.selectors.has or a web-features id such as has, then call browsercompat_search_features if you do not know the key.` |
 
 A resolver miss is a result, not an error. Its `guidance`: `No BCD key or web-features id matched "<input>". Call browsercompat_search_features with a plain-language name, or browsercompat_list_reference with topic bcd_namespaces to see the 12 top-level namespaces.`
 
@@ -518,7 +518,7 @@ The cheap ship/no-ship entry point across several features at once. `browsercomp
 
 | Param | Type | Notes |
 |:------|:-----|:------|
-| `features` | `string[]` (1–20), required | Each entry a BCD key or web-features id. The cap is a schema constraint, so a longer list is rejected by name rather than silently truncated. |
+| `features` | `string[]` (1–20), required | Each entry a BCD key or web-features id, 1–200 characters. Both caps are schema constraints, so a longer list and an empty or over-long entry are rejected by name rather than silently truncated. |
 | `resolve` | `boolean`, default `false` | as above |
 
 **Output** — `{ results[], all_widely_available }`.
@@ -537,7 +537,7 @@ Partial success is native: a per-item `found` flag, no separate `failed[]`, beca
 
 | reason | code | when | recovery |
 |:-------|:-----|:-----|:---------|
-| `invalid_feature_input` | `ValidationError` | any array entry is empty or whitespace-only | `Remove the empty entry. Each item is a BCD key such as css.selectors.has or a web-features id such as has; use browsercompat_search_features to find one.` |
+| `invalid_feature_input` | `ValidationError` | any array entry is whitespace-only. An empty or over-200-character entry is rejected against the input schema instead | `Replace the whitespace-only entry with a BCD key such as css.selectors.has or a web-features id such as has; use browsercompat_search_features to find one.` |
 
 **Enrichment**
 
@@ -611,7 +611,7 @@ Zero hits are a successful empty result, not an error.
 
 | Param | Type | Notes |
 |:------|:-----|:------|
-| `features` | `string[]` (1–20), required | BCD keys or web-features ids |
+| `features` | `string[]` (1–20), required | BCD keys or web-features ids, 1–200 characters per entry. Both caps are schema constraints, as on `browsercompat_check_baseline`. |
 | `targets` | `string`, required | A browserslist query, e.g. `defaults` or `> 0.5%, last 2 versions`. Required rather than defaulted: browserslist reads `.browserslistrc`, `package.json`, and `BROWSERSLIST` from the process working directory when no query is passed, which in a container is the image and not the caller's project. |
 | `resolve` | `boolean`, default `false` | as above |
 
@@ -622,7 +622,7 @@ Zero hits are a successful empty result, not an error.
 | 1 | `browserslist(targets, { path: false })` | `BrowserslistError` → `invalid_target_query` |
 | 2 | Split tokens by agent, map through the browserslist↔BCD table | unmapped agent → `unchecked_targets[reason: 'no_bcd_browser']` |
 | 3 | `resolveTargetVersion` per mapped token | unresolvable → `unchecked_targets[reason: 'unknown_version']` |
-| 4 | If no token resolved → `no_targets_resolved` | error |
+| 4 | If no token resolved **and** no token was a mapped agent carrying an unresolvable version → `no_targets_resolved` | error |
 | 5 | Resolve each feature; `supportAt` for every resolved target | `unknown` verdict → `unchecked_targets[reason: 'no_bcd_data']`, feature verdict `inconclusive` |
 | 6 | `browserslist.coverage(resolvedTokens)` and `coverage(uncheckedTokens)` | — |
 
@@ -638,6 +638,8 @@ Zero hits are a successful empty result, not an error.
 | `results` | array | `{ input, found, resolved_as, name?, verdict, failing_targets[], compat_keys?, guidance? }` |
 | `all_clear` | boolean | true only when every feature is `clears` and `unchecked_targets` is empty |
 
+`targets_resolved` can legitimately be empty — a query whose every token is a mapped agent with an unresolvable version (`safari TP`) is an ordinary response, not an error: every token lands in `unchecked_targets` with its own reason, every feature is `inconclusive`, both coverage figures follow from the token split, and `all_clear` is false. `format()` renders `No target version was evaluated.` under **Targets evaluated** rather than an empty table, so the per-token reasons under **Not evaluated** are what the reader is left with.
+
 `verdict` ∈ `clears` \| `fails` \| `inconclusive` \| `miss` \| `ambiguous`. Each `failing_targets` entry is `{ agent, version_token, bcd_browser, bcd_version, verdict }` with the `supportAt` verdict that caused the failure, so `partial` and `flagged` failures are distinguishable from plain `unsupported`. `ambiguous` fires when a feature resolves to a web-features id spanning more than one BCD key (`resolved_as.bcd_key` is `null`) — `supportAt` needs one specific key, so no single verdict is computed; `compat_keys` lists the feature's `compat_features` and `guidance` asks the agent to re-call with one of them (Core Mechanics §7). `all_clear` requires every result to be `clears`, so a single `ambiguous` result blocks it same as a `fails`.
 
 **Errors**
@@ -645,10 +647,12 @@ Zero hits are a successful empty result, not an error.
 | reason | code | when | recovery |
 |:-------|:-----|:-----|:---------|
 | `invalid_target_query` | `ValidationError` | browserslist rejected the query (`err.browserslist === true`) | `Fix the query and retry — call browsercompat_list_reference with topic browserslist_agents for the 19 valid agent ids. A negation-only query needs a base, e.g. "defaults, not dead" rather than "not dead".` |
-| `no_targets_resolved` | `ValidationError` | the query resolved only to agents with no BCD counterpart | `Widen the query to include a mapped browser — call browsercompat_list_reference with topic browserslist_agents to see which of the 19 agents have compatibility data.` |
-| `invalid_feature_input` | `ValidationError` | any `features` entry is empty or whitespace-only | `Remove the empty entry. Each item is a BCD key such as css.selectors.has or a web-features id such as has; use browsercompat_search_features to find one.` |
+| `no_targets_resolved` | `ValidationError` | the query matched no browser versions at all, or only agents with no BCD counterpart | `Widen the targets query so it selects at least one browser that has compatibility data — call browsercompat_list_reference with topic browserslist_agents to see which of the 19 agents do.` |
+| `invalid_feature_input` | `ValidationError` | any `features` entry is whitespace-only. An empty or over-200-character entry is rejected against the input schema instead | `Replace the whitespace-only entry with a BCD key such as css.selectors.has or a web-features id such as has; use browsercompat_search_features to find one.` |
 
 The browserslist error message is forwarded verbatim in the thrown message — it names the offending token (`Unknown browser Xyz`) better than any rewrite would.
+
+`no_targets_resolved` covers the two ways a query can leave nothing to evaluate, and its message says which: `"> 100%" matched no browser versions at all.` when browserslist returned zero tokens, and `"op_mini all" resolved only to agents with no browser-compat-data counterpart: op_mini.` when every token belongs to an unmapped agent, naming them. An unresolvable version on a mapped agent is not one of them.
 
 **Enrichment**
 
@@ -836,6 +840,10 @@ Each step is independently testable. Steps 3 and 4 are the load-bearing ones; ev
 **D36 — Shared output shapes (`resolved_as`, the Baseline block, a support row, the limiting browser) are defined once in `compat-shapes.ts`, alongside their renderers.** The design specifies each shape identically wherever it appears, so centralizing it avoids five near-identical Zod definitions drifting apart. Error contracts are the deliberate exception and stay inline per tool, per the framework's locality convention (`api-errors` skill) — the contract is part of each tool's own documented public surface.
 
 **D37 — The shared feature resolver lives in its own module, `services/baseline/feature-resolver.ts`, beside rather than inside `baseline-service.ts`.** It imports the BCD, baseline, and search services, and nothing imports it back. Resolving through search from inside `BaselineService` itself would create a `baseline-service ↔ search-service` import cycle, which Biome's `noImportCycles` rule treats as an error.
+
+**D38 — A query whose every token is a mapped agent with an unresolvable version is an ordinary `compare_support` response, not an error.** `unchecked_targets` already carries a per-token reason that says exactly what happened, and the same token produces exactly that alongside a token that did resolve (`chrome 100, safari TP`) — erroring on it alone made the single-token case answer a different question from the multi-token one. `no_targets_resolved` is reserved for a query with no per-token reason worth returning: zero tokens, or only unmapped agents, with the message naming which and listing the agents. The cost is that a caller who queries only `safari TP` gets a successful response with nothing evaluated, which the `inconclusive` verdicts and the `No target version was evaluated.` line state plainly.
+
+**D39 — The 1–200 character bound lives on the input schema; `invalid_feature_input` covers whitespace-only.** `get_feature` declared the empty and over-length cases in its error contract while its own schema already rejected them, leaving that half of the contract unreachable behind a generic schema rejection; the two array tools bounded their entries neither way. The length bound now sits on the schema for all three, where it is rejected by field name and advertised in `inputSchema`, and whitespace-only — the one case a length validator cannot express — is what the handler-level contract covers, identically across `get_feature`, `check_baseline`, and `compare_support`.
 
 ---
 

@@ -73,7 +73,7 @@ const ResultSchema = z.object({
   verdict: z
     .enum(['clears', 'fails', 'inconclusive', 'miss', 'ambiguous'])
     .describe(
-      'clears only when every resolved target is supported; inconclusive when a target could not be evaluated; ambiguous when the id spans more than one compat key.',
+      'clears only when every resolved target is supported; inconclusive when a target could not be evaluated, including when no target resolved at all; ambiguous when the id spans more than one compat key.',
     ),
   failing_targets: z
     .array(FailingTargetSchema.describe('A target this feature does not clear.'))
@@ -94,11 +94,11 @@ export const browsercompatCompareSupport = tool('browsercompat_compare_support',
 
   input: z.object({
     features: z
-      .array(z.string())
+      .array(z.string().min(1).max(200))
       .min(1)
       .max(20)
       .describe(
-        'Up to 20 entries, each a browser-compat-data key such as css.selectors.has or a web-features id such as has. Call browsercompat_search_features first for any entry whose key you do not already know.',
+        'Up to 20 entries, each a browser-compat-data key such as css.selectors.has or a web-features id such as has, 1 to 200 characters. An empty or longer entry is rejected against this schema; a whitespace-only entry returns invalid_feature_input. Call browsercompat_search_features first for any entry whose key you do not already know.',
       ),
     targets: z
       .string()
@@ -166,16 +166,16 @@ export const browsercompatCompareSupport = tool('browsercompat_compare_support',
     {
       reason: 'no_targets_resolved',
       code: JsonRpcErrorCode.ValidationError,
-      when: 'The query resolved only to agents with no browser-compat-data counterpart.',
+      when: 'The query matched no browser versions at all, or only agents with no browser-compat-data counterpart. A mapped agent whose version token does not resolve is reported in unchecked_targets instead.',
       recovery:
-        'Widen the query to include a mapped browser — call browsercompat_list_reference with topic browserslist_agents to see which of the 19 agents have compatibility data.',
+        'Widen the targets query so it selects at least one browser that has compatibility data — call browsercompat_list_reference with topic browserslist_agents to see which of the 19 agents do.',
     },
     {
       reason: 'invalid_feature_input',
       code: JsonRpcErrorCode.ValidationError,
-      when: 'An entry in features is empty or whitespace-only.',
+      when: 'An entry in features is whitespace-only. An empty or over-200-character entry is rejected against the input schema instead.',
       recovery:
-        'Remove the empty entry. Each item is a BCD key such as css.selectors.has or a web-features id such as has; use browsercompat_search_features to find one.',
+        'Replace the whitespace-only entry with a BCD key such as css.selectors.has or a web-features id such as has; use browsercompat_search_features to find one.',
     },
   ],
 
@@ -186,7 +186,7 @@ export const browsercompatCompareSupport = tool('browsercompat_compare_support',
     if (input.features.some((entry) => entry.trim().length === 0)) {
       throw ctx.fail(
         'invalid_feature_input',
-        'One or more entries in features are empty or whitespace-only.',
+        'One or more entries in features are whitespace-only.',
         { ...ctx.recoveryFor('invalid_feature_input') },
       );
     }
@@ -199,10 +199,19 @@ export const browsercompatCompareSupport = tool('browsercompat_compare_support',
 
     const tokens = targets.queryTokens(input.targets, ctx);
     const { resolved, unchecked } = await targets.resolveTargets(tokens);
-    if (resolved.length === 0) {
+    /**
+     * Only a query with nothing left to evaluate is an error. A mapped agent
+     * whose version token does not resolve carries a per-token reason of its
+     * own, so it stays an ordinary response with the token in unchecked_targets
+     * — the same treatment it gets alongside a token that did resolve.
+     */
+    if (resolved.length === 0 && !unchecked.some((target) => target.reason === 'unknown_version')) {
+      const unmapped = [...new Set(unchecked.map((target) => target.agent))].join(', ');
       throw ctx.fail(
         'no_targets_resolved',
-        `"${input.targets}" resolved only to agents with no browser-compat-data counterpart.`,
+        unchecked.length === 0
+          ? `"${input.targets}" matched no browser versions at all.`
+          : `"${input.targets}" resolved only to agents with no browser-compat-data counterpart: ${unmapped}.`,
         { ...ctx.recoveryFor('no_targets_resolved') },
       );
     }
@@ -257,7 +266,8 @@ export const browsercompatCompareSupport = tool('browsercompat_compare_support',
       }
 
       const failing: z.infer<typeof FailingTargetSchema>[] = [];
-      let inconclusive = false;
+      /** No evaluated target means no feature can be said to clear one. */
+      let inconclusive = resolved.length === 0;
       for (const target of resolved) {
         const evaluation = bcd.supportAt(leaf, target.bcd_browser, target.bcd_release_index);
         if (evaluation.verdict === 'supported') continue;
@@ -358,11 +368,15 @@ export const browsercompatCompareSupport = tool('browsercompat_compare_support',
     }
 
     lines.push('', '## Targets evaluated');
-    lines.push('| Target | browser-compat-data |', '|:--|:--|');
-    for (const target of result.targets_resolved) {
-      lines.push(
-        `| ${target.agent} ${target.version_token} | ${target.bcd_browser} ${target.bcd_version ?? 'older than all releases'} (index ${target.bcd_release_index}) |`,
-      );
+    if (result.targets_resolved.length === 0) {
+      lines.push('No target version was evaluated.');
+    } else {
+      lines.push('| Target | browser-compat-data |', '|:--|:--|');
+      for (const target of result.targets_resolved) {
+        lines.push(
+          `| ${target.agent} ${target.version_token} | ${target.bcd_browser} ${target.bcd_version ?? 'older than all releases'} (index ${target.bcd_release_index}) |`,
+        );
+      }
     }
 
     lines.push('', '## Not evaluated');
