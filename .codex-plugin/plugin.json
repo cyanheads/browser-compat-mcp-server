@@ -1,6 +1,6 @@
 {
   "name": "browser-compat-mcp-server",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Browser compatibility and Baseline status for any web feature — offline, from MDN's browser-compat-data, web-features, and caniuse. STDIO or Streamable HTTP.",
   "author": {
     "name": "cyanheads",
