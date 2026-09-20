@@ -65,13 +65,13 @@ COPY package.json bun.lock ./
 # SDKs, parsers) that Bun would otherwise auto-install. Anything this server
 # actually imports belongs in its own `dependencies`, so nothing needed at
 # runtime is lost. The OTEL step below carries the same flag — without it, that
-# Installed by default. Omit them for a leaner image at build time
-# with: docker build --build-arg OTEL_ENABLED=false
+# install re-resolves the graph and pulls every optional peer back in.
+RUN --mount=type=cache,target=/root/.bun/install/cache \
     bun install --production --omit=peer --frozen-lockfile --ignore-scripts
 
 # Conditionally install OpenTelemetry optional peer dependencies (Tier 3).
-# These are not bundled by default to keep the base image lean. Enable at build time
-# with: docker build --build-arg OTEL_ENABLED=true
+# Installed by default. Omit them for a leaner image at build time
+# with: docker build --build-arg OTEL_ENABLED=false
 ARG OTEL_ENABLED=true
 RUN --mount=type=cache,target=/root/.bun/install/cache \
     if [ "$OTEL_ENABLED" = "true" ]; then \
