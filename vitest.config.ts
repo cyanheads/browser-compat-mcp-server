@@ -24,6 +24,13 @@ export default mergeConfig(
             name: 'unit',
             include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
             exclude: ['tests/smoke/**', 'tests/integration/**', 'tests/fuzz/**'],
+            // The first test in each file to touch a data service pays the
+            // cold load of all four bundled datasets (~100ms measured in
+            // isolation) — but every unit file does this independently
+            // (isolate: true forks a process per file), so a full-suite run
+            // has many forks parsing the 20MB BCD JSON at once. 45s absorbs
+            // that contention without masking a genuinely hung test.
+            testTimeout: 45_000,
           },
         },
         {
@@ -40,6 +47,10 @@ export default mergeConfig(
             include: ['tests/integration/**/*.test.ts'],
             maxWorkers: 1,
             testTimeout: 30_000,
+            // No live-HTTP integration suite exists yet — this server has no
+            // upstream to integration-test against (Core Mechanics: no
+            // network calls at runtime). Not a failure until one is added.
+            passWithNoTests: true,
           },
         },
         {
@@ -48,6 +59,9 @@ export default mergeConfig(
             name: 'fuzz',
             include: ['tests/fuzz/**/*.test.ts'],
             testTimeout: 15_000,
+            // No fuzz suite exists yet — out of scope for this pass. Not a
+            // failure until one is added.
+            passWithNoTests: true,
           },
         },
       ],

@@ -5,30 +5,53 @@
  */
 
 import { createApp } from '@cyanheads/mcp-ts-core';
-import { echoPrompt } from './mcp-server/prompts/definitions/echo.prompt.js';
-import { echoResource } from './mcp-server/resources/definitions/echo.resource.js';
-import { echoAppUiResource } from './mcp-server/resources/definitions/echo-app-ui.app-resource.js';
-import { echoTool } from './mcp-server/tools/definitions/echo.tool.js';
-import { echoAppTool } from './mcp-server/tools/definitions/echo-app.app-tool.js';
+import { browsercompatCheckBaseline } from './mcp-server/tools/definitions/browsercompat-check-baseline.tool.js';
+import { browsercompatCompareSupport } from './mcp-server/tools/definitions/browsercompat-compare-support.tool.js';
+import { browsercompatGetFeature } from './mcp-server/tools/definitions/browsercompat-get-feature.tool.js';
+import { browsercompatListReference } from './mcp-server/tools/definitions/browsercompat-list-reference.tool.js';
+import { browsercompatSearchFeatures } from './mcp-server/tools/definitions/browsercompat-search-features.tool.js';
+import { getBaselineService } from './services/baseline/baseline-service.js';
+import { getBcdService } from './services/bcd/bcd-service.js';
+import { getDataVersion } from './services/data-version/data-version-service.js';
+import { getSearchService } from './services/search/search-service.js';
+import { getTargetsService } from './services/targets/targets-service.js';
 
 await createApp({
   name: 'browser-compat-mcp-server',
   title: 'browser-compat-mcp-server',
-  tools: [echoTool, echoAppTool],
-  resources: [echoResource, echoAppUiResource],
-  prompts: [echoPrompt],
-  // Server-level orientation forwarded to the model on every initialize: two to three
-  // cohesive sentences in one string literal, written for the calling agent (which tool
-  // opens a workflow, what chains into what). Operator configuration stays in the README.
-  // instructions: 'Resolve a name to an id with example_search, then pass that id to example_get for the full record. Results are paged; follow nextOffset until it is absent.',
+  cacheHints: {
+    'tools/list': { ttlMs: 3_600_000, cacheScope: 'public' },
+    'server/discover': { ttlMs: 3_600_000, cacheScope: 'public' },
+  },
+  tools: [
+    browsercompatListReference,
+    browsercompatGetFeature,
+    browsercompatCheckBaseline,
+    browsercompatSearchFeatures,
+    browsercompatCompareSupport,
+  ],
+  resources: [],
+  prompts: [],
+  instructions:
+    'Browser support and Baseline status for web platform features, served from bundled MDN browser-compat-data, web-features, and caniuse data — offline, no API key, no rate limit. Start at browsercompat_search_features when the feature key is unknown; browsercompat_get_feature returns the per-feature record and browsercompat_check_baseline answers ship-or-not across up to 20 features at once. Every tool takes one feature string that is either a BCD key (css.selectors.has) or a web-features id (has), and echoes resolved_as saying which namespace it matched; an unresolved feature comes back as found: false with guidance, never an error. browsercompat_compare_support requires an explicit browserslist query and reports unchecked_targets for target browsers with no compatibility data — a pass is never claimed for a browser that was not evaluated. browsercompat_list_reference enumerates the namespaces, browser ids, browserslist agents, Baseline states, groups, and snapshots the other tools expect. Every response echoes data_version; the data is a package snapshot, so a feature that shipped in the last few weeks may lag.',
+  // Keyless public reference data — serve the full inventory without an auth gate.
+  landing: { requireAuth: false },
 
-  // Session posture in code rather than in a Dockerfile. MCP_SESSION_MODE still
-  // wins when it is set. Add `require: 'stateful'` — `{ default: 'stateful',
-  // require: 'stateful' }` — when a tool asks the caller for input mid-handler,
-  // so a stateless deployment fails at startup instead of losing that tool.
-  // sessionMode: 'stateless',
-
-  // Release what setup() allocated: a watcher, a socket, a timer the framework
-  // cannot see. Runs after the transport stops and before the logger closes.
-  // teardown(core) { core.logger.info('bye', { requestId: 'shutdown', timestamp: new Date().toISOString() }); },
+  setup(core) {
+    // Start the dataset loads without awaiting, so a hosted container warms
+    // during boot while stdio startup stays instant. The first tool call awaits
+    // the same promises.
+    Promise.all([
+      getBcdService(),
+      getBaselineService(),
+      getTargetsService(),
+      getSearchService(),
+      getDataVersion(),
+    ]).catch((error: unknown) => {
+      core.logger.error(
+        'Dataset warm-up failed',
+        error instanceof Error ? error : new Error(String(error)),
+      );
+    });
+  },
 });
