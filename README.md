@@ -19,11 +19,17 @@
 
 </div>
 
+<div align="center">
+
+**Public Hosted Server:** [https://browser-compat.caseyjhand.com/mcp](https://browser-compat.caseyjhand.com/mcp)
+
+</div>
+
 ---
 
 ## Overview
 
-Web platform compatibility for frontend work: per-browser support from MDN's `@mdn/browser-compat-data`, Baseline state and dates from `web-features`, and browserslist target resolution weighted by `caniuse-lite` usage figures. Every dataset ships inside the package, so there are no runtime network calls, no API key, no rate limit, and no upstream to be down — the same answers come back air-gapped. Runs as a stdio process or a local Streamable HTTP server.
+Web platform compatibility for frontend work: per-browser support from MDN's `@mdn/browser-compat-data`, Baseline state and dates from `web-features`, and browserslist target resolution weighted by `caniuse-lite` usage figures. Every dataset ships inside the package, so there are no runtime network calls, no API key, no rate limit, and no upstream to be down — the same answers come back air-gapped. Runs as a stdio process, a local Streamable HTTP server, or the public hosted endpoint above.
 
 ### Tools
 
@@ -122,6 +128,23 @@ Agent-friendly output:
 ---
 
 ## Getting started
+
+### Public Hosted Instance
+
+A public instance is available at `https://browser-compat.caseyjhand.com/mcp` — no installation required. Point any MCP client at it via Streamable HTTP:
+
+```json
+{
+  "mcpServers": {
+    "browser-compat-mcp-server": {
+      "type": "streamable-http",
+      "url": "https://browser-compat.caseyjhand.com/mcp"
+    }
+  }
+}
+```
+
+### Self-Hosted / Local
 
 Add the following to your MCP client configuration file:
 
