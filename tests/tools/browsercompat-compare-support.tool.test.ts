@@ -262,6 +262,21 @@ describe('browsercompat_compare_support — errors', () => {
     ).toBe(false);
   });
 
+  it('rejects an over-500-character targets query at the schema boundary', () => {
+    expect(
+      browsercompatCompareSupport.input.safeParse({
+        features: ['has'],
+        targets: 'a'.repeat(501),
+      }).success,
+    ).toBe(false);
+    expect(
+      browsercompatCompareSupport.input.safeParse({
+        features: ['has'],
+        targets: 'a'.repeat(500),
+      }).success,
+    ).toBe(true);
+  });
+
   it('rejects an empty features array and an over-cap features array at the schema boundary', () => {
     expect(
       browsercompatCompareSupport.input.safeParse({ features: [], targets: 'defaults' }).success,

@@ -60,8 +60,8 @@ logs/
 # ENVIRONMENT & CONFIGURATION
 # =============================================================================
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 .wrangler
 worker-configuration.d.ts
 

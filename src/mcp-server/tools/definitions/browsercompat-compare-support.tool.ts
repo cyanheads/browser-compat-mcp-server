@@ -103,8 +103,9 @@ export const browsercompatCompareSupport = tool('browsercompat_compare_support',
     targets: z
       .string()
       .min(1)
+      .max(500)
       .describe(
-        'A browserslist query, for example "defaults" or "> 0.5%, last 2 versions". Required: with no query browserslist would read config from the process working directory rather than from your project.',
+        'A browserslist query, for example "defaults" or "> 0.5%, last 2 versions", 1 to 500 characters. Required: with no query browserslist would read config from the process working directory rather than from your project.',
       ),
     resolve: z
       .boolean()

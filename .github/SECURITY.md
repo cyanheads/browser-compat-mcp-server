@@ -9,16 +9,19 @@ versions are not patched — upgrade to the current release.
 
 Please do not open a public issue for security reports. Instead:
 
-<!-- GitHub's private reporting is off by default. Turn it on under
-     Settings → Code security → Private vulnerability reporting. -->
-
 - Report privately via GitHub: **Security** tab → **Report a vulnerability**, or
-- Email **[your-contact-email]**
+- Email **security@caseyjhand.com**
 
 Include a minimal reproduction where possible, with any API keys, tokens, or
 credentials redacted — a placeholder is enough to show the shape. You'll
 receive an acknowledgment, and credit in the release notes if the report leads
 to a fix (unless you prefer otherwise).
 
-<!-- If you want to commit to a response window, say so above — e.g.
-     "You'll receive an acknowledgment within a few days." -->
+## Scope
+
+The server answers every request from four datasets bundled inside the package.
+It makes no network call at runtime, holds no credentials, stores no caller
+data, and runs no subprocess. Reports about the *contents* of
+`@mdn/browser-compat-data`, `web-features`, `caniuse-lite`, or `browserslist`
+belong upstream with those projects; reports about how this server reads,
+indexes, or reports that data belong here.

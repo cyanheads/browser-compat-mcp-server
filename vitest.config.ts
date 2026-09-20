@@ -58,10 +58,11 @@ export default mergeConfig(
           test: {
             name: 'fuzz',
             include: ['tests/fuzz/**/*.test.ts'],
-            testTimeout: 15_000,
-            // No fuzz suite exists yet — out of scope for this pass. Not a
-            // failure until one is added.
-            passWithNoTests: true,
+            // Tens of handler invocations per tool, on top of the same cold
+            // dataset load a unit file pays — and this project runs alongside
+            // the unit forks, so it inherits their contention. Same 45s for
+            // the same reason.
+            testTimeout: 45_000,
           },
         },
       ],
