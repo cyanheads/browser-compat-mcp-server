@@ -6,11 +6,11 @@
 
 | Name | Description | Key Inputs | Annotations |
 |:-----|:------------|:-----------|:------------|
-| `browsercompat_list_reference` | Enumerate the vocabulary the other tools expect: BCD namespaces, BCD browser ids, browserslist agent ids and their BCD counterparts, Baseline states, web-features groups, and ECMAScript snapshots. | `topic: 'bcd_namespaces' \| 'bcd_browsers' \| 'browserslist_agents' \| 'baseline_states' \| 'groups' \| 'snapshots'` | `readOnlyHint`, `openWorldHint: false` |
-| `browsercompat_get_feature` | Get the full compatibility record for one web feature: Baseline state and date, deprecation and standards status, per-browser version-added/removed with flags, prefixes and partial-implementation notes, and MDN/spec links. | `feature: string`, `resolve?: boolean`, `include_runtimes?: boolean` | `readOnlyHint`, `openWorldHint: false` |
-| `browsercompat_check_baseline` | Check whether one or more features are safe to ship: Baseline state and date, the limiting browser and version, deprecated/discouraged flags, and the share of tracked global traffic that would be excluded. | `features: string[]`, `resolve?: boolean` | `readOnlyHint`, `openWorldHint: false` |
-| `browsercompat_search_features` | Find web features by plain name or keyword when the canonical key is unknown, across CSS, JavaScript, HTML, Web APIs, SVG, MathML, WebAssembly, and HTTP headers. | `query: string`, `namespace?: string`, `baseline?: string`, `limit?: number` | `readOnlyHint`, `openWorldHint: false` |
-| `browsercompat_compare_support` | Compute whether a set of features clears an explicit browserslist target query, reporting the failing target per feature and the target browsers that could not be evaluated. | `features: string[]`, `targets: string`, `resolve?: boolean` | `readOnlyHint`, `openWorldHint: false` |
+| `browsercompat_list_reference` | Enumerate the vocabulary the other tools expect: BCD namespaces, BCD browser ids, browserslist agent ids and their BCD counterparts, Baseline states, web-features groups, and ECMAScript snapshots. | `topic: 'bcd_namespaces' \| 'bcd_browsers' \| 'browserslist_agents' \| 'baseline_states' \| 'groups' \| 'snapshots'` | `readOnlyHint`, `idempotentHint`, `openWorldHint: false` |
+| `browsercompat_get_feature` | Get the full compatibility record for one web feature: Baseline state and date, deprecation and standards status, per-browser version-added/removed with flags, prefixes and partial-implementation notes, and MDN/spec links. | `feature: string`, `resolve?: boolean`, `include_runtimes?: boolean` | `readOnlyHint`, `idempotentHint`, `openWorldHint: false` |
+| `browsercompat_check_baseline` | Check whether one or more features are safe to ship: Baseline state and date, the limiting browser and version, deprecated/discouraged flags, and the share of tracked global traffic that would be excluded. | `features: string[]`, `resolve?: boolean` | `readOnlyHint`, `idempotentHint`, `openWorldHint: false` |
+| `browsercompat_search_features` | Find web features by plain name or keyword when the canonical key is unknown, across CSS, JavaScript, HTML, Web APIs, SVG, MathML, WebAssembly, and HTTP headers. | `query: string`, `namespace?: string`, `baseline?: string`, `limit?: number` | `readOnlyHint`, `idempotentHint`, `openWorldHint: false` |
+| `browsercompat_compare_support` | Compute whether a set of features clears an explicit browserslist target query, reporting the failing target per feature and the target browsers that could not be evaluated. | `features: string[]`, `targets: string`, `resolve?: boolean` | `readOnlyHint`, `idempotentHint`, `openWorldHint: false` |
 
 ### Resources
 
@@ -42,6 +42,8 @@ Audience: any agent writing or reviewing frontend code. This one gets called dur
 | Tool prefix | `browsercompat_` |
 
 The display and machine identity is the bare hyphenated repo name on every surface except the npm package name and the registry identity. Never Title Case it.
+
+No tool declares a `title`. Every natural per-tool title (`Get Feature`, `Check Baseline`) is Title Case, which the identity rule forbids — see D32.
 
 ---
 
@@ -351,14 +353,14 @@ Dates: `since_date` from `baseline_low_date` (when the feature became newly avai
 
 ### 6. Search index
 
-One row per searchable entity: 20,517 BCD leaves plus the 23 `compat_features`-less features = **20,540 rows**. The 12 `moved`/`split` entries are indexed as alias rows pointing at their `redirect_target`.
+One row per searchable entity: 20,517 BCD leaves plus the 23 `compat_features`-less features = **20,540 rows**. Of the 12 `moved`/`split` entries, only the 10 `moved` entries — which carry a single `redirect_target` — are indexed as alias rows pointing at it. The 2 `split` entries carry `redirect_targets` (plural, 2–3 targets) and have no single target to alias to; a split id resolves instead through the feature resolver's split-miss guidance (§1 step 5), independent of the search index.
 
 | Row field | Source | Coverage |
 |:----------|:-------|:---------|
 | `bcd_key` | leaf path | 20,517 |
 | `baseline_id` | `by_compat_key` ownership, else the first `web-features:` tag | 15,577 leaves reach an id (15,292 by ownership, plus 285 more by tag only — 7 `by_compat_key` leaves carry no tag at all, so tag coverage alone (15,570) undercounts) |
 | `name` | web-features `name`, joined onto every leaf its feature owns | 1,191 distinct names, 0 duplicates |
-| `description` | web-features `description`, else BCD `description` with HTML tags stripped | 1,191 / 5,071 |
+| `description` | web-features `description`, else BCD `description` with tags stripped and its HTML entities decoded (`&lt; &gt; &quot; &apos; &#39; &nbsp; &amp;`) | 1,191 / 5,071 |
 | `caniuse_title` | `caniuse-lite` `feature(id).title` via the feature's `caniuse[]` array | 333 features → 7,769 leaves |
 | `path_tokens` | leaf path split on `.` and camelCase boundaries | 20,517 |
 
@@ -385,7 +387,7 @@ A web-features id can own more than one BCD key, and this is the common case, no
 
 When `resolved_as.bcd_key` is `null` (the id resolved to more than one key), a tool omits those leaf-only fields entirely rather than guessing which key they should represent, and instead returns `compat_keys` — the feature's full `compat_features` list — so the agent can re-call with one specific key for the per-browser answer. `browsercompat_compare_support` cannot compute a `clears`/`fails` verdict without a single key's support data either, so it reports this case as verdict `ambiguous`. `baseline` is exempt from this rule: it is legitimately reported at the feature level (the web-features rollup) when resolved via a web-features id — that is a real, intended value, not a stand-in for a missing per-key answer.
 
-`limiting_browser` is separately undefined unless the feature has actually reached support everywhere in the 7-browser Baseline core set. It is populated only when every core browser's verdict is `supported`, `partial`, `prefixed`, `flagged`, or `preview_only` — each has a resolvable version to compare. When one or more core browsers are `unsupported`, `removed`, or `unknown`, there is no "newest version required" to name, so `limiting_browser` is omitted; the per-browser `support` array already shows which browsers are the actual blocker.
+`limiting_browser` is separately undefined unless the feature has actually reached support everywhere in the 7-browser Baseline core set. It is populated only when every core browser's verdict is `supported`, `partial`, `prefixed`, or `flagged`, **and** carries a resolvable `version_added` — a `preview_only` verdict qualifies by verdict but carries no version, so a core set containing one still omits `limiting_browser`. When one or more core browsers are `unsupported`, `removed`, `preview_only`, or `unknown`, there is no "newest version required" to name, so `limiting_browser` is omitted; the per-browser `support` array already shows which browsers are the actual blocker.
 
 ---
 
@@ -418,7 +420,7 @@ The vocabulary tool, and the standing routing target for every recovery string, 
 
 **Enrichment:** `data_version` (`echo` kind), `attribution` — populated only for `browserslist_agents`, which surfaces caniuse usage figures.
 
-**Annotations:** `readOnlyHint: true`, `openWorldHint: false`.
+**Annotations:** `readOnlyHint: true`, `idempotentHint: true`, `openWorldHint: false`.
 
 ---
 
@@ -444,7 +446,7 @@ The 80% tool.
 | `outcome` | enum | `found` \| `no_compat_data` \| `miss` |
 | `resolved_as` | object \| null | see Core Mechanics §1 |
 | `name` | string, optional | web-features `name` |
-| `description` | string, optional | web-features `description`, else BCD `description` with tags stripped |
+| `description` | string, optional | web-features `description`, else BCD `description` with tags stripped and HTML entities decoded |
 | `baseline` | object, optional | `{ state, since_date?, high_date?, date_is_upper_bound? }` |
 | `status` | object, optional | `{ deprecated, experimental, standard_track, discouraged? }`. Absent for all `webextensions` leaves — render "not recorded", never `false`. Also absent when `resolved_as.bcd_key` is `null` (Core Mechanics §7). |
 | `limiting_browser` | object, optional | Among the 7-browser Baseline core set, the one requiring the newest version. `{ browser_id, name, version }`. Populated only under the conditions in Core Mechanics §7. |
@@ -456,25 +458,30 @@ The 80% tool.
 
 Each `support` row: `{ browser_id, browser_name, verdict, version_added?, version_added_is_upper_bound?, version_removed?, version_last?, partial?, prefix?, alternative_name?, flags?, notes?, impl_url? }`. Absent upstream fields stay absent — never coerced to `false`, `0`, or `""`.
 
-**`format()`** leads with the decision and renders every output field:
+**`format()`** leads with the decision and renders every output field. It reports each field by name rather than in loose prose, since a support row can carry any combination of `partial` / `prefix` / `alternative_name` / `flags` that a fixed-column table can't accommodate — worked example, computed against BCD 8.1.1:
 
 ```
-# :has() — css.selectors.has
-**Baseline: widely available** since 2026-06-19 (newly available 2023-12-19)
-Standard track · not deprecated · not experimental
-**Limiting browser:** Firefox 121
+# :has()
+**found:** true · **outcome:** found
+**Resolved:** "css.selectors.has" → bcd_key css.selectors.has · baseline_id has · via bcd_key
+**Baseline: widely** · since_date 2023-12-19 · high_date 2026-06-19
+**Status:** standard_track true · deprecated false · experimental false
+**Limiting browser:** Firefox (firefox) 121
 
-The :has() CSS functional pseudo-class matches an element if any of the selectors
-passed as parameters would match at least one element.
+The :has() CSS functional pseudo-class matches an element if any of the selectors passed
+as parameters would match at least one element.
 
-| Browser | Support |
-|:--|:--|
-| Chrome | 105 |
-| Firefox | 121 |
-| Safari | 15.4 |
+## Support
+- **Chrome** (chrome): supported
+  - version_added: 105
+- **Firefox** (firefox): supported
+  - version_added: 121
+- **Safari** (safari): supported
+  - version_added: 15.4
 …
 
-MDN: <url> · Spec: <url>
+MDN: <url>
+Spec: <url>
 ```
 
 **Errors**
@@ -485,7 +492,7 @@ MDN: <url> · Spec: <url>
 
 A resolver miss is a result, not an error. Its `guidance`: `No BCD key or web-features id matched "<input>". Call browsercompat_search_features with a plain-language name, or browsercompat_list_reference with topic bcd_namespaces to see the 12 top-level namespaces.`
 
-For an ambiguous `redirect_targets` hit: `"<input>" was split into <targets, comma-separated>. Call browsercompat_get_feature again with one of them.` — list every target, since one of the two current `split` entries has 3.
+For an ambiguous `redirect_targets` hit: `"<input>" was split into <targets, comma-separated>. Call <calling tool> again with one of them.` — list every target, since one of the two current `split` entries has 3. The resolver is shared across all five tools, so `<calling tool>` names whichever tool the caller actually invoked, not always `browsercompat_get_feature`.
 
 For `no_compat_data`: `"<id>" is a tracked web-features entry with no browser-compat-data keys yet, so there is no per-browser support to report. Call browsercompat_check_baseline for its Baseline state.`
 
@@ -497,7 +504,7 @@ For `no_compat_data`: `"<id>" is a tracked web-features entry with no browser-co
 | `baselineNotMapped` | `notice` | `baseline.state === 'not_mapped'` — says the key is outside the web-features mapping and names `browsercompat_search_features` to find a mapped sibling |
 | `runtimesExcluded` | `notice` | `include_runtimes` is false and the leaf carries `bun`/`deno`/`nodejs`/`oculus` data |
 
-**Annotations:** `readOnlyHint: true`, `openWorldHint: false`.
+**Annotations:** `readOnlyHint: true`, `idempotentHint: true`, `openWorldHint: false`.
 
 ---
 
@@ -541,7 +548,7 @@ Partial success is native: a per-item `found` flag, no separate `failed[]`, beca
 | `attribution` | plain, with `enrichmentTrailer.label: 'Usage data'` | any result carries `usage_percent_excluded` |
 | `unresolvedNotice` | `notice` | one or more inputs missed — names `browsercompat_search_features` |
 
-**Annotations:** `readOnlyHint: true`, `openWorldHint: false`.
+**Annotations:** `readOnlyHint: true`, `idempotentHint: true`, `openWorldHint: false`.
 
 ---
 
@@ -562,7 +569,7 @@ The discovery entry point.
 
 **Output** — `{ results[] }` where each result is `{ bcd_key?, baseline_id?, name?, description?, baseline_state, matched_on, support_summary, mdn_url? }`.
 
-`support_summary` is a single line over the Baseline core set, e.g. `Chrome 105, Edge 105, Firefox 121, Safari 15.4`, with `—` for unsupported and `?` for unknown.
+`support_summary` is a single line over all 7 Baseline core browsers, including the mobile twins, e.g. `Chrome 105, Chrome Android 105, Edge 105, Firefox 121, Firefox for Android 121, Safari 15.4, Safari on iOS 15.4`, with `—` for unsupported and `?` for unknown.
 
 **Errors**
 
@@ -577,7 +584,7 @@ Zero hits are a successful empty result, not an error.
 | Condition | Fragment |
 |:----------|:---------|
 | `namespace` filter was set | `No match in the <ns> namespace. Re-run without namespace, or call browsercompat_list_reference with topic bcd_namespaces to pick a different area.` |
-| `baseline` filter was set | `No match at Baseline <state>. Re-run without the baseline filter — 25.5% of BCD keys are not_mapped and are excluded by any other baseline value.` |
+| `baseline` filter was set | `No match at Baseline <state>. Re-run without the baseline filter — <share>% of BCD keys are not_mapped and are excluded by any other baseline value.` — `<share>` is computed at call time from the live not_mapped count, not a hardcoded figure (25.5% today) |
 | no filters set | `No feature matched "<query>". Try the CSS property, JS method, or HTML element name on its own, or call browsercompat_list_reference with topic bcd_namespaces to browse by area.` |
 
 **Enrichment**
@@ -590,9 +597,9 @@ Zero hits are a successful empty result, not an error.
 | `appliedFilters` | plain, with an `enrichmentTrailer.render` | any of `namespace` / `baseline` was set |
 | `noMatchNotice` | `notice` | zero hits |
 
-`format()` shows the top rows and closes with `…and N more` whenever the cap was hit.
+`format()` renders only the returned `results`; the match total and display cap travel via `enrichment` (`totalCount`, `truncated`, `shown`, `cap`) per D19, not as a "…and N more" line in `format()`.
 
-**Annotations:** `readOnlyHint: true`, `openWorldHint: false`.
+**Annotations:** `readOnlyHint: true`, `idempotentHint: true`, `openWorldHint: false`.
 
 ---
 
@@ -677,7 +684,7 @@ Targets evaluated cover 83.88% of tracked traffic · 5 target versions not evalu
 
 `firefox 140` is the Firefox ESR entry `defaults` pulls in, and `anchor-name` arrived in Firefox 147 — the kind of failure a "last 2 versions" reading misses entirely.
 
-**Annotations:** `readOnlyHint: true`, `openWorldHint: false`.
+**Annotations:** `readOnlyHint: true`, `idempotentHint: true`, `openWorldHint: false`.
 
 ---
 
@@ -691,9 +698,13 @@ Targets evaluated cover 83.88% of tracked traffic · 5 target versions not evalu
 | `search-service` | the 20,540-row in-memory index built from the three above | `search_features`, and resolver step 6 |
 | `data-version-service` | the four package versions (see *Reading dependency versions at runtime*) | all five tools |
 
+The shared feature resolver (Core Mechanics §1) lives beside `baseline-service` in its own module, `src/services/baseline/feature-resolver.ts`, rather than as a method on the `BaselineService` class: it imports the BCD, baseline, and search services, and nothing imports it back, which keeps `baseline-service` and `search-service` from importing each other — Biome's `noImportCycles` (error-level) forbids that cycle, which resolving through search from inside `baseline-service` would otherwise create.
+
 No resilience table applies — there is no upstream to retry, time out, or pace.
 
-`caniuse-lite` is declared as a direct dependency even though `browserslist` already depends on it: `targets-service` imports `agents` and `feature()` from it directly. It is not a redundant entry to prune.
+`caniuse-lite` is declared as a direct dependency even though `browserslist` already depends on it: `targets-service` imports `agents` and `feature()` from it directly. It is not a redundant entry to prune. It ships no types, so `src/types/caniuse-lite.d.ts` declares an ambient module covering only the members `targets-service` reads (`agents`, `features`, `feature()`).
+
+The output shapes shared across tools — `resolved_as`, the Baseline block, a support row, and the limiting browser — are defined once in `src/mcp-server/tools/definitions/compat-shapes.ts`, alongside their renderers, since the design specifies each identically wherever it appears. Error contracts stay inline per tool, per the framework's locality convention.
 
 **State lifecycle.** Every dataset is process-global and immutable. Nothing is tenant-scoped, nothing goes in `ctx.state`, nothing has a TTL, and nothing needs to survive a restart. Each service is a promise-memoized lazy accessor over a dynamic `import()`. `setup(core)` kicks the loads off **without awaiting** (with a `.catch` that logs, so a rejection is not unhandled) and the first tool call awaits the same promises — a hosted container warms during startup while stdio start stays instant.
 
@@ -707,6 +718,8 @@ No resilience table applies — there is no upstream to retry, time out, or pace
 No server-specific env vars: no API keys, no base URLs, and deliberately no browserslist configuration variable — the target query is always a tool input, never ambient state.
 
 No auth scopes. Every tool is read-only over bundled public data with no tenant-scoped state and no upstream quota to protect, so a scope would gate nothing.
+
+`createApp()` also sets `cacheHints` for `tools/list` and `server/discover` (1-hour TTL, public scope) and `landing: { requireAuth: false }`. The tool catalog is fixed at boot — all five tools are registered up front and nothing changes it at runtime — so caching the list response costs nothing; and the landing page serves the full inventory without an auth gate, consistent with D25's no-scopes stance.
 
 ## Licensing surfaces
 
@@ -790,7 +803,7 @@ Each step is independently testable. Steps 3 and 4 are the load-bearing ones; ev
 
 **D20 — The caniuse attribution is a per-response `enrichment.attribution` field, populated only when a usage figure is present.** CC-BY-4.0 requires attribution wherever the data is conveyed; a static `THIRD_PARTY_NOTICES.md` alone would not travel with a tool response that quotes a percentage. Tools that emit no usage figure do not carry the string, so it is signal rather than boilerplate.
 
-**D21 — `THIRD_PARTY_NOTICES.md` in `files[]` carries the Apache-2.0 and CC-BY-4.0 text.** `web-features` ships `LICENSE.txt` and no `NOTICE`, so Apache-2.0 §4(d) adds no further obligation beyond carrying the license and stating attribution.
+**D21 — `THIRD_PARTY_NOTICES.md` in `files[]` carries the full Apache-2.0 and MIT license texts, and a CC BY 4.0 notice.** `web-features` ships `LICENSE.txt` and no `NOTICE`, so Apache-2.0 §4(d) adds no further obligation beyond carrying the license and stating attribution — met with the full Apache-2.0 text. `browserslist`'s MIT license is likewise reproduced in full, since MIT requires the license text be included in copies of the software. CC BY 4.0 is different: it requires attribution and a link to the license, not the reproduction of its legal code, so the file carries the license notice, the required attribution string, and the canonical legalcode URL rather than the full CC BY 4.0 text — satisfying the obligation without the added bulk.
 
 **D22 — `targets` is required on `compare_support`.** With no query, browserslist reads `.browserslistrc`, `package.json`, and `BROWSERSLIST` from the process working directory, which in a container is the image rather than the caller's project. Verified: an explicit query bypasses all three. Requiring it means config discovery is never reached.
 
@@ -802,13 +815,27 @@ Each step is independently testable. Steps 3 and 4 are the load-bearing ones; ev
 
 **D26 — A multi-key web-features id (`resolved_as.bcd_key === null`) omits leaf-only fields and returns `compat_keys` instead of aggregating across keys.** Verified 880 of 1,203 features (73%) own more than one BCD key, so this is the common case, not a corner case. `support`, `status`, `limiting_browser`, `mdn_url`, and `spec_urls` are per-leaf facts with no single correct value across keys that can disagree (D13's `grid` divergence). `browsercompat_compare_support` reports the same situation as verdict `ambiguous` rather than guessing which key's support data to check against the targets.
 
-**D27 — `limiting_browser` is populated only once every core-set browser has a resolvable version.** When a browser hasn't shipped support at all (`unsupported`, `removed`, or `unknown`), "the browser requiring the newest version" has no answer — the per-browser `support` array already names the actual blocker, so `limiting_browser` is omitted rather than picking an arbitrary browser or a version that doesn't exist.
+**D27 — `limiting_browser` is populated only once every core-set browser has a resolvable version.** When a browser hasn't shipped support at all (`unsupported`, `removed`, or `unknown`), "the browser requiring the newest version" has no answer — the per-browser `support` array already names the actual blocker, so `limiting_browser` is omitted rather than picking an arbitrary browser or a version that doesn't exist. `preview_only` is the same case in disguise: it qualifies as a limiting-eligible verdict but carries no `version_added` to compare, so a core set containing one also omits `limiting_browser`.
 
 **D28 — `browsercompat_list_reference`'s `baseline_states` counts are per-BCD-key, not per-feature.** Verified: the feature-level split (646 `high` / 117 `low` / 428 `false` / 12 no-status, out of 1,191 features) and the per-key split via `by_compat_key` (8,739 `high` / 1,244 `low` / 5,309 `false`, plus 5,225 keys in no `by_compat_key` entry at all, summing to all 20,517 leaves) are different populations. Since the server reports Baseline per BCD key everywhere else (Requirements, D13), the reference tool's counts follow that same unit rather than the feature-level numbers that happen to appear earlier in this doc's data verification.
 
 **D29 — Dropped `limiting_target` from `browsercompat_compare_support`'s `results` schema.** It named a single "limiting" target with no defined selection rule and no use in the worked example, and `failing_targets[]` already itemizes every failing target with its own verdict — a second field naming one of them adds an unspecified tie-break with no offsetting value.
 
 **D30 — `all_widely_available` is strictly the Baseline predicate: every result resolved (`found` or `no_compat_data`) with `baseline.state === 'widely'`; a `miss` forces false; deprecation and discouragement do not enter.** The field's name is a Baseline term, and folding advisability into it would make a `widely` deprecated feature read as "not widely available", which is false. The per-result `deprecated` / `discouraged` fields carry that half of the ship decision, mirroring how `all_clear` on `browsercompat_compare_support` is strict about `unchecked_targets` rather than blending them in.
+
+**D31 — Every tool declares `idempotentHint: true` alongside `readOnlyHint` and `openWorldHint: false`.** All five tools are pure functions over immutable in-process data: the same input against the same `data_version` always produces the same output, and no call has a side effect a repeat could compound.
+
+**D32 — No tool declares a `title`.** Every natural per-tool title (`Get Feature`, `Check Baseline`) is Title Case, which the identity rule forbids on every display surface. Rather than force a title that either violates the rule or reads oddly as a bare lowercase-hyphenated string, tools omit `title` and fall back to their `name`.
+
+**D33 — `createApp()` sets `cacheHints` for `tools/list` / `server/discover` and `landing: { requireAuth: false }`.** The tool catalog is fixed at boot with no dynamic registration, so caching the list response is free correctness; the landing page serves the full inventory without an auth gate for the same reason D25 sets no scopes — there is nothing behind it that needs one.
+
+**D34 — `src/types/caniuse-lite.d.ts` is a local ambient module declaration.** `caniuse-lite` ships no types of its own; the file declares only the members `targets-service` actually reads (`agents`, `features`, `feature()`).
+
+**D35 — `stripTags` also decodes the HTML entities BCD escapes in `description` text, not just strips tags.** `&lt;container-query&gt;` renders as `<container-query>`, the token an agent actually recognizes, rather than the literal escaped text.
+
+**D36 — Shared output shapes (`resolved_as`, the Baseline block, a support row, the limiting browser) are defined once in `compat-shapes.ts`, alongside their renderers.** The design specifies each shape identically wherever it appears, so centralizing it avoids five near-identical Zod definitions drifting apart. Error contracts are the deliberate exception and stay inline per tool, per the framework's locality convention (`api-errors` skill) — the contract is part of each tool's own documented public surface.
+
+**D37 — The shared feature resolver lives in its own module, `services/baseline/feature-resolver.ts`, beside rather than inside `baseline-service.ts`.** It imports the BCD, baseline, and search services, and nothing imports it back. Resolving through search from inside `BaselineService` itself would create a `baseline-service ↔ search-service` import cycle, which Biome's `noImportCycles` rule treats as an error.
 
 ---
 
