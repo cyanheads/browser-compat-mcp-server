@@ -1,6 +1,6 @@
 # browser-compat-mcp-server - Directory Structure
 
-Generated on: 2026-09-20 03:27:24
+Generated on: 2026-09-20 03:50:28
 
 ```text
 browser-compat-mcp-server/
@@ -24,6 +24,7 @@ browser-compat-mcp-server/
 │   ├── extensions.json
 │   └── settings.json
 ├── changelog/
+│   ├── 0.1.x/
 │   └── template.md
 ├── docs/
 │   └── design.md
@@ -169,6 +170,7 @@ browser-compat-mcp-server/
 │   ├── data/
 │   │   └── browserslist-bcd-map.test.ts
 │   ├── fuzz/
+│   │   └── tools.fuzz.test.ts
 │   ├── integration/
 │   ├── prompts/
 │   ├── resources/
@@ -202,6 +204,7 @@ browser-compat-mcp-server/
 ├── biome.json
 ├── bun.lock
 ├── bunfig.toml
+├── CHANGELOG.md
 ├── CLAUDE.md
 ├── devcheck.config.json
 ├── Dockerfile
