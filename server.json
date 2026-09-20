@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.cyanheads/browser-compat-mcp-server",
-  "description": "Browser support and Baseline status for any web feature — offline, from MDN browser-compat-data.",
+  "description": "Browser compatibility and Baseline status for any web feature — offline, from bundled MDN data.",
   "repository": {
     "url": "https://github.com/cyanheads/browser-compat-mcp-server.git",
     "source": "github"

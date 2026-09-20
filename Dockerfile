@@ -51,10 +51,10 @@ ENV NODE_ENV=production
 # OCI image metadata (https://github.com/opencontainers/image-spec/blob/main/annotations.md)
 ARG APP_VERSION
 LABEL org.opencontainers.image.title="browser-compat-mcp-server"
-LABEL org.opencontainers.image.description=""
+LABEL org.opencontainers.image.description="Browser compatibility and Baseline status for any web feature — offline, from MDN's browser-compat-data, web-features, and caniuse."
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL org.opencontainers.image.version="${APP_VERSION}"
-LABEL org.opencontainers.image.source=""
+LABEL org.opencontainers.image.source="https://github.com/cyanheads/browser-compat-mcp-server"
 
 # Copy dependency manifests
 COPY package.json bun.lock ./
@@ -65,8 +65,8 @@ COPY package.json bun.lock ./
 # SDKs, parsers) that Bun would otherwise auto-install. Anything this server
 # actually imports belongs in its own `dependencies`, so nothing needed at
 # runtime is lost. The OTEL step below carries the same flag — without it, that
-# install re-resolves the graph and pulls every optional peer back in.
-RUN --mount=type=cache,target=/root/.bun/install/cache \
+# Installed by default. Omit them for a leaner image at build time
+# with: docker build --build-arg OTEL_ENABLED=false
     bun install --production --omit=peer --frozen-lockfile --ignore-scripts
 
 # Conditionally install OpenTelemetry optional peer dependencies (Tier 3).

@@ -4,11 +4,6 @@ Thanks for using `browser-compat-mcp-server`. Bugs, feature requests, and docume
 
 Open one from the **Issues** tab and pick the **Bug Report** or **Feature Request** form. Both are structured, and filling in the fields is what makes an issue actionable. Anything that fits neither can be a plain issue — a half-formed idea in your own words is fine.
 
-<!-- Optional: swap the line above for direct links once you know your repo URL —
-     https://github.com/OWNER/REPO/issues/new?template=bug_report.yml -->
-
-<!-- This project takes contributions as issues. Do not add a "pull requests are welcome" line. -->
-
 ## Server bug or framework bug?
 
 `browser-compat-mcp-server` is built on [@cyanheads/mcp-ts-core](https://github.com/cyanheads/mcp-ts-core), which handles transports, auth, config, logging, and telemetry. Sorting out which layer broke saves everyone a round-trip:

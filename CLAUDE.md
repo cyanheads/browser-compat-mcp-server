@@ -11,16 +11,23 @@
 
 ---
 
-## First Session
+## This Server
 
-This project was just scaffolded with `bunx @cyanheads/mcp-ts-core init`. You're holding a production-grade MCP framework with the hard parts already solved — error handling, telemetry, auth, transport, validation, lifecycle. What's missing is the **domain**. Your job: design the tool, resource, and service surface with the user, then implement it as small pure handlers that throw — the framework catches, classifies, and instruments the rest. Design before code; the user's first messages set direction, so wait for them before scaffolding definitions.
+Offline reference for web platform compatibility — what a coding agent needs while writing frontend code: can I use this feature, in which browsers, and is it safe to ship. Five tools, no resources, no prompts.
 
-> **Remove this section** from CLAUDE.md / AGENTS.md after completing these steps. The skills and conventions below remain — this block is one-time onboarding only.
+| Tool | Answers |
+|:-----|:--------|
+| `browsercompat_list_reference` | The vocabulary the other tools expect — BCD namespaces and browser ids, browserslist agents, Baseline states, groups, ECMAScript snapshots |
+| `browsercompat_get_feature` | The full compatibility record for one feature |
+| `browsercompat_check_baseline` | Ship-or-not across up to 20 features |
+| `browsercompat_search_features` | The canonical key behind a plain-language name |
+| `browsercompat_compare_support` | Whether features clear an explicit browserslist target query |
 
-1. **Get your bearings.** Take stock of the project tree, the skills in `framework-skills/`, and the tools/MCP servers available. Light tool use is fine for context-building — you're mapping the territory, not committing yet.
-2. **Read the framework docs** — `node_modules/@cyanheads/mcp-ts-core/CLAUDE.md` (builders, Context, errors, exports, conventions)
-3. **Run the `setup` skill** — read `framework-skills/setup/SKILL.md` and follow its checklist (project orientation, agent protocol file selection, echo definition cleanup, skill sync)
-4. **Design the server** — read `framework-skills/design-mcp-server/SKILL.md` and work through it with the user to map the domain into tools, resources, and services before scaffolding
+Four datasets ship inside the package: `@mdn/browser-compat-data` (per-browser support), `web-features` (Baseline state and dates), `caniuse-lite` (usage weighting, search titles), and `browserslist` (target queries).
+
+**There is no upstream.** No network calls at runtime, no API key, no rate limit, and no server-specific env vars — a change that introduces a fetch, a credential, or a config knob changes the server's premise, not just its implementation. Every response echoes `data_version`, because a bundled snapshot goes stale on exactly the newest features.
+
+`docs/design.md` is the source of truth for the tool surface, the verified data shapes behind it, and the decisions log.
 
 ---
 
@@ -259,20 +266,23 @@ See framework CLAUDE.md and the `api-errors` skill for the full auto-classificat
 ```text
 src/
   index.ts                              # createApp() entry point
-  config/
-    server-config.ts                    # Server-specific env vars (Zod schema)
+  data/
+    browserslist-bcd-map.ts             # browserslist agent -> BCD browser map
   services/
-    [domain]/
-      [domain]-service.ts               # Domain service (init/accessor pattern)
-      types.ts                          # Domain types
+    bcd/                                # Leaf index, release ordering, supportAt
+    baseline/                           # web-features, by_compat_key, feature-resolver
+    targets/                            # browserslist + caniuse-lite, coverage, usage
+    search/                             # Ranked in-memory index over the three above
+    data-version/                       # Bundled dataset versions
   mcp-server/
     tools/definitions/
-      [tool-name].tool.ts               # Tool definitions
-    resources/definitions/
-      [resource-name].resource.ts       # Resource definitions
-    prompts/definitions/
-      [prompt-name].prompt.ts           # Prompt definitions
+      browsercompat-*.tool.ts           # Tool definitions
+      compat-shapes.ts                  # Output shapes shared across tools
+  types/
+    caniuse-lite.d.ts                   # Ambient module declaration
 ```
+
+No `config/` directory: the server declares no environment variables of its own.
 
 ---
 

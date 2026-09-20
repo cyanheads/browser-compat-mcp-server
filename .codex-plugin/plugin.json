@@ -23,7 +23,7 @@
   "mcpServers": "./.codex-plugin/mcp.json",
   "interface": {
     "displayName": "browser-compat-mcp-server",
-    "shortDescription": "Browser compatibility and Baseline status for any web feature, offline, from MDN's browser-compat-data, web-features, and caniuse.",
+    "shortDescription": "Browser compatibility and Baseline status for any web feature — offline, from MDN's browser-compat-data, web-features, and caniuse.",
     "longDescription": "Web platform feature reference for coding agents: per-browser support matrices from @mdn/browser-compat-data, Baseline status from web-features, and browserslist target resolution with caniuse-lite usage weighting. All data is bundled — no API key, no network.",
     "developerName": "cyanheads",
     "category": "developer-tools",

@@ -101,6 +101,16 @@
     "vitest": "^5.0.1"
   },
   "author": "Casey Hand <casey@caseyjhand.com> (https://caseyjhand.com)",
+  "funding": [
+    {
+      "type": "github",
+      "url": "https://github.com/sponsors/cyanheads"
+    },
+    {
+      "type": "buy_me_a_coffee",
+      "url": "https://www.buymeacoffee.com/cyanheads"
+    }
+  ],
   "homepage": "https://github.com/cyanheads/browser-compat-mcp-server#readme",
   "bugs": {
     "url": "https://github.com/cyanheads/browser-compat-mcp-server/issues"
