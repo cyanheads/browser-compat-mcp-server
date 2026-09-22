@@ -69,14 +69,14 @@ describe('browsercompat_get_feature — miss (D7: a result, not a throw)', () =>
   });
 });
 
-describe('browsercompat_get_feature — no_compat_data (23 compat_features-less features)', () => {
-  it('masonry resolves found: true, outcome no_compat_data, empty compat_keys, and guidance', async () => {
-    const { result } = await run({ feature: 'masonry' });
+describe('browsercompat_get_feature — no_compat_data (21 compat_features-less features)', () => {
+  it('intersection-observer-v2 resolves found: true, outcome no_compat_data, empty compat_keys, and guidance', async () => {
+    const { result } = await run({ feature: 'intersection-observer-v2' });
     expect(result).toMatchObject({
       found: true,
       outcome: 'no_compat_data',
-      resolved_as: { bcd_key: null, baseline_id: 'masonry' },
-      name: 'Masonry',
+      resolved_as: { bcd_key: null, baseline_id: 'intersection-observer-v2' },
+      name: 'Intersection observer visibility tracking',
       baseline: { state: 'limited' },
       compat_keys: [],
     });
@@ -108,12 +108,12 @@ describe('browsercompat_get_feature — multi-key ambiguity (D26, Core Mechanics
 });
 
 describe('browsercompat_get_feature — resolver redirect (D4/D26)', () => {
-  it('display-grid-lanes follows the moved redirect to masonry', async () => {
+  it('display-grid-lanes follows the moved redirect to grid-lanes', async () => {
     const { result } = await run({ feature: 'display-grid-lanes' });
     expect(result).toMatchObject({
       found: true,
-      outcome: 'no_compat_data',
-      resolved_as: { bcd_key: null, baseline_id: 'masonry', resolved_via: 'redirect' },
+      outcome: 'found',
+      resolved_as: { bcd_key: null, baseline_id: 'grid-lanes', resolved_via: 'redirect' },
     });
   });
 });
@@ -174,7 +174,7 @@ describe('browsercompat_get_feature — Baseline not_mapped enrichment (D14)', (
 describe('browsercompat_get_feature — enrichment: data_version', () => {
   it('always echoes data_version, even on a miss', async () => {
     const { ctx } = await run({ feature: 'nope-xyz' });
-    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.1' });
+    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.2' });
   });
 });
 
@@ -184,9 +184,39 @@ describe('browsercompat_get_feature — resolve: true', () => {
     expect(result).toMatchObject({ found: true, resolved_as: { resolved_via: 'search' } });
   });
 
-  it('a name shared across a multi-key feature stays a miss even with resolve: true', async () => {
+  it('a name shared across a multi-key feature resolves through the feature, with compat_keys', async () => {
     const { result } = await run({ feature: 'Container queries', resolve: true });
-    expect(result.found).toBe(false);
+    expect(result).toMatchObject({
+      found: true,
+      outcome: 'found',
+      resolved_as: {
+        input: 'Container queries',
+        bcd_key: null,
+        baseline_id: 'container-queries',
+        resolved_via: 'search',
+      },
+      name: 'Container queries',
+    });
+    expect(result.compat_keys).toHaveLength(12);
+    expect(result.support).toBeUndefined();
+    const blocks = browsercompatGetFeature.format?.(result);
+    const text = (blocks?.[0] as { text: string } | undefined)?.text;
+    expect(text).toContain('via search');
+    expect(text).toContain('css.at-rules.container');
+  });
+
+  it('a dotted notation resolves to its exact key through the path_suffix tier', async () => {
+    const { result } = await run({ feature: 'Element.prototype.animate', resolve: true });
+    expect(result).toMatchObject({
+      found: true,
+      resolved_as: { bcd_key: 'api.Element.animate', resolved_via: 'search' },
+    });
+    expect(result.support?.length).toBeGreaterThan(0);
+  });
+
+  it('a suffix shared by keys of two features stays a miss', async () => {
+    const { result } = await run({ feature: 'referrerpolicy.unsafe-url', resolve: true });
+    expect(result).toMatchObject({ found: false, outcome: 'miss', resolved_as: null });
   });
 
   it('is off by default — the same punctuated alias misses without resolve', async () => {
@@ -254,7 +284,7 @@ describe('browsercompat_get_feature — format()', () => {
   });
 
   it('renders the empty compat_keys case with an explanatory phrase, not a bare empty list', async () => {
-    const { result } = await run({ feature: 'masonry' });
+    const { result } = await run({ feature: 'intersection-observer-v2' });
     const blocks = browsercompatGetFeature.format?.(result);
     const text = (blocks?.[0] as { text: string } | undefined)?.text;
     expect(text).toContain('**compat_keys:** none — this entry owns no browser-compat-data keys');

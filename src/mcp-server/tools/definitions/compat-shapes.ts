@@ -26,7 +26,7 @@ export const ResolvedAsSchema = z.object({
   resolved_via: z
     .enum(['bcd_key', 'web_features_id', 'web_features_id_normalized', 'redirect', 'search'])
     .describe(
-      'Which step of the resolution order matched: bcd_key or web_features_id for an exact match, web_features_id_normalized when it matched only after lowercasing, redirect when the input pointed to a browser-compat-data entry that has moved or split, or search when resolve was true and the search index accepted a single unambiguous top hit — treat a search match as a best guess, not a confirmed key.',
+      'Which step of the resolution order matched: bcd_key or web_features_id for an exact match, web_features_id_normalized when it matched only after lowercasing, redirect when the input pointed to a browser-compat-data entry that has moved or split, or search when resolve was true and the best exact matches in the search index all named one feature or key — treat a search match as a best guess, not a confirmed key.',
     ),
 });
 

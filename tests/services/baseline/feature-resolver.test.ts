@@ -80,14 +80,14 @@ describe('resolveFeature — web-features id (step 3) and lowercased retry (step
     expect(result.compat_keys?.length).toBeGreaterThan(1);
   });
 
-  it('masonry (D26/no compat_features) resolves found: true with an empty compat_keys array', async () => {
-    const result = await resolveFeature('masonry', OPTS);
+  it('intersection-observer-v2 (D26/no compat_features) resolves found: true with an empty compat_keys array', async () => {
+    const result = await resolveFeature('intersection-observer-v2', OPTS);
     expect(result).toEqual({
       found: true,
       resolved_as: {
-        input: 'masonry',
+        input: 'intersection-observer-v2',
         bcd_key: null,
-        baseline_id: 'masonry',
+        baseline_id: 'intersection-observer-v2',
         resolved_via: 'web_features_id',
       },
       compat_keys: [],
@@ -103,10 +103,16 @@ describe('resolveFeature — redirect follow (step 5)', () => {
       resolved_as: {
         input: 'display-grid-lanes',
         bcd_key: null,
-        baseline_id: 'masonry',
+        baseline_id: 'grid-lanes',
         resolved_via: 'redirect',
       },
-      compat_keys: [],
+      compat_keys: [
+        'css.properties.display.grid-lanes',
+        'css.properties.display.inline-grid-lanes',
+        'css.properties.flow-tolerance',
+        'css.properties.flow-tolerance.infinite',
+        'css.properties.flow-tolerance.normal',
+      ],
     });
   });
 
@@ -148,8 +154,64 @@ describe('resolveFeature — resolve: true search fallback (step 6, D6)', () => 
     });
   });
 
-  it('does NOT resolve "Container queries" — the name is shared across the feature’s 12 keys, tying tier 2', async () => {
-    const result = await resolveFeature('Container queries', { ...OPTS, resolve: true });
+  it.each([
+    ['Container queries', 'container-queries', 12],
+    ['Cascade layers', 'cascade-layers', 8],
+  ])(
+    'resolves "%s" through its feature: every tier 2 row carries one baseline_id',
+    async (name, id, keyCount) => {
+      const result = await resolveFeature(name, { ...OPTS, resolve: true });
+      expect(result).toMatchObject({
+        found: true,
+        resolved_as: { input: name, bcd_key: null, baseline_id: id, resolved_via: 'search' },
+      });
+      if (!result.found) throw new Error('unreachable');
+      expect(result.compat_keys).toHaveLength(keyCount);
+    },
+  );
+
+  it.each([
+    ['Array.prototype.at', 'javascript.builtins.Array.at'],
+    ['String.prototype.replaceAll', 'javascript.builtins.String.replaceAll'],
+    ['Element.prototype.animate', 'api.Element.animate'],
+    ['element.animate', 'api.Element.animate'],
+    ['display grid', 'css.properties.display.grid'],
+    ['display: grid', 'css.properties.display.grid'],
+    ['Array.prototype.at()', 'javascript.builtins.Array.at'],
+    ['Object.setPrototypeOf', 'javascript.builtins.Object.setPrototypeOf'],
+    ['position: sticky', 'css.properties.position.sticky'],
+  ])('resolves the path_suffix notation "%s" to exactly %s', async (input, key) => {
+    const result = await resolveFeature(input, { ...OPTS, resolve: true });
+    expect(result).toMatchObject({
+      found: true,
+      resolved_as: { input, bcd_key: key, resolved_via: 'search' },
+    });
+    if (!result.found) throw new Error('unreachable');
+    expect(result.compat_keys).toBeUndefined();
+  });
+
+  it.each([
+    ['window.external', 'external', 'api.Window.external'],
+    ['import defer', 'import-defer', 'javascript.statements.import.defer'],
+    ['navigator.install()', 'navigator-install', 'api.Navigator.install'],
+  ])(
+    'resolves the feature named exactly "%s" to %s, not the suffix key %s it does not own',
+    async (name, id) => {
+      const result = await resolveFeature(name, { ...OPTS, resolve: true });
+      expect(result).toMatchObject({
+        found: true,
+        resolved_as: { input: name, baseline_id: id, resolved_via: 'search' },
+      });
+    },
+  );
+
+  it('a suffix shared by keys of two features (referrer-policy and svg) is a miss', async () => {
+    const result = await resolveFeature('referrerpolicy.unsafe-url', { ...OPTS, resolve: true });
+    expect(result.found).toBe(false);
+  });
+
+  it('a top hit below tier 2 is a miss — "container query" tops out at tier 4', async () => {
+    const result = await resolveFeature('container query', { ...OPTS, resolve: true });
     expect(result.found).toBe(false);
   });
 

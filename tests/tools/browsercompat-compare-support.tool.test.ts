@@ -127,7 +127,7 @@ describe('browsercompat_compare_support — verdicts', () => {
   });
 
   it('ambiguous with an empty compat_keys list (no_compat_data feature) still reports ambiguous, not a crash', async () => {
-    const { result } = await run(['masonry'], 'defaults');
+    const { result } = await run(['intersection-observer-v2'], 'defaults');
     expect(result.results[0]).toMatchObject({ verdict: 'ambiguous', compat_keys: [] });
     expect(result.results[0]?.guidance).toContain('browsercompat_check_baseline');
   });
@@ -187,6 +187,27 @@ describe('browsercompat_compare_support — resolve: true', () => {
     expect(result.results[0]).toMatchObject({
       found: true,
       resolved_as: { resolved_via: 'search' },
+    });
+  });
+
+  it('a multi-key feature name is ambiguous with compat_keys, not a miss', async () => {
+    const { result } = await run(['Container queries'], 'chrome 120', true);
+    expect(result.results[0]).toMatchObject({
+      found: true,
+      verdict: 'ambiguous',
+      resolved_as: { bcd_key: null, baseline_id: 'container-queries', resolved_via: 'search' },
+      failing_targets: [],
+    });
+    expect(result.results[0]?.compat_keys).toHaveLength(12);
+    expect(result.all_clear).toBe(false);
+  });
+
+  it('a path_suffix notation gets a real verdict against its exact key', async () => {
+    const { result } = await run(['display: grid'], 'chrome 120', true);
+    expect(result.results[0]).toMatchObject({
+      found: true,
+      verdict: 'clears',
+      resolved_as: { bcd_key: 'css.properties.display.grid', resolved_via: 'search' },
     });
   });
 });
@@ -312,7 +333,7 @@ describe('browsercompat_compare_support — errors', () => {
 describe('browsercompat_compare_support — enrichment', () => {
   it('always echoes data_version, attribution, and totalCount', async () => {
     const { ctx } = await run(['has'], 'chrome 120');
-    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.1' });
+    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.2' });
     expect(getEnrichment(ctx).attribution).toMatch(/caniuse\.com/);
     expect(getEnrichment(ctx).totalCount).toBe(1);
   });

@@ -122,7 +122,7 @@ export const browsercompatListReference = tool('browsercompat_list_reference', {
         'snapshots',
       ])
       .describe(
-        'Which vocabulary to list: bcd_namespaces for the 12 top-level browser-compat-data namespaces, bcd_browsers for the 17 tracked browsers, browserslist_agents for the 19 browserslist ids mapped to browser-compat-data browsers, baseline_states for the 4 Baseline states, groups for the 103 web-features groups, or snapshots for the 11 ECMAScript snapshots.',
+        'Which vocabulary to list: bcd_namespaces for the 12 top-level browser-compat-data namespaces, bcd_browsers for the 17 tracked browsers, browserslist_agents for the 19 browserslist ids mapped to browser-compat-data browsers, baseline_states for the 4 Baseline states, groups for the 104 web-features groups, or snapshots for the 11 ECMAScript snapshots.',
       ),
   }),
 
@@ -218,15 +218,18 @@ export const browsercompatListReference = tool('browsercompat_list_reference', {
     }
 
     if (input.topic === 'groups') {
+      const parents = new Set(Object.values(baseline.groups).map((group) => group.parent));
       for (const id of Object.keys(baseline.groups).sort()) {
         const group = baseline.groups[id];
         if (!group) continue;
+        const place = group.parent
+          ? `web-features group inside ${group.parent}.`
+          : 'Top-level web-features group.';
+        const nested = parents.has(id) ? '; nested groups are included' : '';
         entries.push({
           id,
           label: group.name,
-          detail: group.parent
-            ? `web-features group inside ${group.parent}.`
-            : 'Top-level web-features group.',
+          detail: `${place} Pass as group to browsercompat_search_features${nested}.`,
         });
       }
     }
@@ -238,7 +241,8 @@ export const browsercompatListReference = tool('browsercompat_list_reference', {
         entries.push({
           id,
           label: snapshot.name,
-          detail: 'ECMAScript snapshot tracked by web-features.',
+          detail:
+            'ECMAScript snapshot tracked by web-features. Pass as snapshot to browsercompat_search_features.',
           spec_url: snapshot.spec,
         });
       }

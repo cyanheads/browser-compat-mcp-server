@@ -1,7 +1,7 @@
 /**
  * @fileoverview The shared feature resolver every tool runs its `feature`
  * string through: exact BCD key, exact web-features id, lowercased id, redirect
- * follow, then — only when asked — the single unambiguous top search hit.
+ * follow, then — only when asked — the top search tier when it names one entity.
  * @module services/baseline/feature-resolver
  */
 
@@ -21,7 +21,7 @@ function missGuidance(input: string, namespaceCount: number): string {
 
 /** Options controlling the optional search step and the tool named in split guidance. */
 export interface ResolveOptions {
-  /** Enables the single-best-search-hit fallback (resolver step 6). */
+  /** Enables the search fallback (resolver step 6): accept a top tier naming one feature or key. */
   resolve: boolean;
   /** Tool the caller should re-run with one concrete target after a split. */
   toolName: string;
@@ -93,10 +93,27 @@ export async function resolveFeature(
   if (options.resolve) {
     const search = await getSearchService();
     const hits = search.rank(trimmed, {});
-    const top = hits[0];
-    if (top && (top.tier === 1 || top.tier === 2) && hits[1]?.tier !== top.tier) {
-      if (top.row.bcd_key !== undefined) return fromBcdKey(top.row.bcd_key, 'search');
-      if (top.row.baseline_id !== undefined) return fromFeatureId(top.row.baseline_id, 'search');
+    const topTier = hits[0]?.tier;
+    if (topTier === 1 || topTier === 2) {
+      /**
+       * An exact label (key, id, name, caniuse title) outranks a path_suffix row
+       * sharing the tier: the feature named "window.external" is the answer, not
+       * a key it does not own that ends in `window.external`. A feature's name is
+       * joined onto every key it owns, so one feature fills the tier with several
+       * rows. Count entities, not rows: a feature id, or the key itself for a row
+       * no feature covers.
+       */
+      const tier = hits.filter((hit) => hit.tier === topTier);
+      const labelled = tier.filter((hit) => hit.matched_on !== 'path_suffix');
+      const top = labelled.length > 0 ? labelled : tier;
+      const entities = new Set(top.map((hit) => hit.row.baseline_id ?? hit.row.bcd_key));
+      const first = top[0]?.row;
+      if (first && entities.size === 1) {
+        if (top.length === 1 && first.bcd_key !== undefined) {
+          return fromBcdKey(first.bcd_key, 'search');
+        }
+        if (first.baseline_id !== undefined) return fromFeatureId(first.baseline_id, 'search');
+      }
     }
   }
 

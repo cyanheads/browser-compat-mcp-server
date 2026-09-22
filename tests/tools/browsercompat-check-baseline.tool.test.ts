@@ -1,6 +1,6 @@
 /**
  * @fileoverview Tests for browsercompat_check_baseline — the worked
- * `['has','array-fromasync','masonry','nope-xyz']` example, `all_widely_available`
+ * `['has','array-fromasync','intersection-observer-v2','nope-xyz']` example, `all_widely_available`
  * semantics (D30), usage exclusion, and error/enrichment behavior.
  * @module tests/tools/browsercompat-check-baseline.tool.test
  */
@@ -9,6 +9,7 @@ import { JsonRpcErrorCode } from '@cyanheads/mcp-ts-core/errors';
 import { createMockContext, getEnrichment } from '@cyanheads/mcp-ts-core/testing';
 import { describe, expect, it } from 'vitest';
 import { browsercompatCheckBaseline } from '@/mcp-server/tools/definitions/browsercompat-check-baseline.tool.js';
+import { getBaselineService } from '@/services/baseline/baseline-service.js';
 
 async function run(features: string[], resolve = false) {
   const ctx = createMockContext({ errors: browsercompatCheckBaseline.errors });
@@ -18,11 +19,16 @@ async function run(features: string[], resolve = false) {
 
 describe('browsercompat_check_baseline — worked example', () => {
   it('reports found/no_compat_data/miss outcomes in input order, all_widely_available false', async () => {
-    const { result } = await run(['has', 'array-fromasync', 'masonry', 'nope-xyz']);
+    const { result } = await run([
+      'has',
+      'array-fromasync',
+      'intersection-observer-v2',
+      'nope-xyz',
+    ]);
     expect(result.results.map((r) => [r.input, r.outcome])).toEqual([
       ['has', 'found'],
       ['array-fromasync', 'found'],
-      ['masonry', 'no_compat_data'],
+      ['intersection-observer-v2', 'no_compat_data'],
       ['nope-xyz', 'miss'],
     ]);
     expect(result.all_widely_available).toBe(false);
@@ -45,22 +51,32 @@ describe('browsercompat_check_baseline — worked example', () => {
     expect(has?.usage_percent_excluded).toBeCloseTo(2.6222, 3);
   });
 
-  it('masonry: limited, no compat_keys, usage still computed via caniuse mapping, no limiting_browser', async () => {
-    const { result } = await run(['has', 'array-fromasync', 'masonry', 'nope-xyz']);
-    const masonry = result.results[2];
-    expect(masonry).toMatchObject({
+  it('intersection-observer-v2: limited, no compat_keys, usage still computed via caniuse mapping, no limiting_browser', async () => {
+    const { result } = await run([
+      'has',
+      'array-fromasync',
+      'intersection-observer-v2',
+      'nope-xyz',
+    ]);
+    const ioV2 = result.results[2];
+    expect(ioV2).toMatchObject({
       found: true,
       outcome: 'no_compat_data',
       baseline: { state: 'limited' },
       compat_keys: [],
     });
-    expect(masonry?.limiting_browser).toBeUndefined();
-    expect(masonry?.deprecated).toBeUndefined();
-    expect(masonry?.usage_percent_excluded).toBeGreaterThan(0);
+    expect(ioV2?.limiting_browser).toBeUndefined();
+    expect(ioV2?.deprecated).toBeUndefined();
+    expect(ioV2?.usage_percent_excluded).toBeGreaterThan(0);
   });
 
   it('nope-xyz: a miss carries guidance and no baseline/limiting_browser fields', async () => {
-    const { result } = await run(['has', 'array-fromasync', 'masonry', 'nope-xyz']);
+    const { result } = await run([
+      'has',
+      'array-fromasync',
+      'intersection-observer-v2',
+      'nope-xyz',
+    ]);
     const miss = result.results[3];
     expect(miss).toEqual({
       input: 'nope-xyz',
@@ -72,7 +88,12 @@ describe('browsercompat_check_baseline — worked example', () => {
   });
 
   it('conforms to the declared output schema', async () => {
-    const { result } = await run(['has', 'array-fromasync', 'masonry', 'nope-xyz']);
+    const { result } = await run([
+      'has',
+      'array-fromasync',
+      'intersection-observer-v2',
+      'nope-xyz',
+    ]);
     expect(result).toEqual(expect.schemaMatching(browsercompatCheckBaseline.output));
   });
 });
@@ -89,7 +110,7 @@ describe('browsercompat_check_baseline — all_widely_available (D30)', () => {
   });
 
   it('a non-widely (limited) result forces it false', async () => {
-    const { result } = await run(['masonry']);
+    const { result } = await run(['intersection-observer-v2']);
     expect(result.all_widely_available).toBe(false);
   });
 
@@ -116,8 +137,8 @@ describe('browsercompat_check_baseline — all_widely_available (D30)', () => {
 
 describe('browsercompat_check_baseline — enrichment', () => {
   it('always echoes data_version and totalCount', async () => {
-    const { ctx, result } = await run(['has', 'masonry']);
-    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.1' });
+    const { ctx, result } = await run(['has', 'intersection-observer-v2']);
+    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.2' });
     expect(getEnrichment(ctx).totalCount).toBe(2);
     expect(result.results).toHaveLength(2);
   });
@@ -153,6 +174,25 @@ describe('browsercompat_check_baseline — resolve: true', () => {
       found: true,
       resolved_as: { resolved_via: 'search' },
     });
+  });
+
+  it('a multi-key feature name reports the feature-level Baseline and its compat_keys', async () => {
+    const { result } = await run(['Container queries', 'Cascade layers'], true);
+    const baseline = await getBaselineService();
+    const [containers, layers] = result.results;
+    expect(containers).toMatchObject({
+      found: true,
+      outcome: 'found',
+      resolved_as: { bcd_key: null, baseline_id: 'container-queries', resolved_via: 'search' },
+      baseline: baseline.baselineForFeature('container-queries'),
+    });
+    expect(containers?.compat_keys).toHaveLength(12);
+    expect(containers?.limiting_browser).toBeUndefined();
+    expect(layers).toMatchObject({
+      resolved_as: { baseline_id: 'cascade-layers' },
+      baseline: baseline.baselineForFeature('cascade-layers'),
+    });
+    expect(layers?.compat_keys).toHaveLength(8);
   });
 });
 
@@ -197,14 +237,19 @@ describe('browsercompat_check_baseline — schema and error boundaries', () => {
 
 describe('browsercompat_check_baseline — format()', () => {
   it('renders the all_widely_available line and one section per result', async () => {
-    const { result } = await run(['has', 'array-fromasync', 'masonry', 'nope-xyz']);
+    const { result } = await run([
+      'has',
+      'array-fromasync',
+      'intersection-observer-v2',
+      'nope-xyz',
+    ]);
     const blocks = browsercompatCheckBaseline.format?.(result);
     const text = (blocks?.[0] as { text: string } | undefined)?.text;
     expect(text).toContain('# Baseline check — 4 features');
     expect(text).toContain('**all_widely_available:** false');
     expect(text).toContain('## :has()');
     expect(text).toContain('**usage_percent_excluded:**');
-    expect(text).toContain('## Masonry');
+    expect(text).toContain('## Intersection observer visibility tracking');
     expect(text).toContain('none — this entry owns no browser-compat-data keys');
     expect(text).toContain('## nope-xyz');
   });

@@ -111,7 +111,7 @@ export const browsercompatCompareSupport = tool('browsercompat_compare_support',
       .boolean()
       .default(false)
       .describe(
-        'When true, fall back to the search index and accept its single unambiguous top hit for each entry. Off by default so a typo returns a miss you can correct rather than a confident answer about the wrong feature.',
+        'When true, an entry that is neither a key nor an id falls back to the search index, such as "Container queries" or "Element.prototype.animate". Its best exact matches are accepted only when they name one feature: a single key resolves to that key and gets a verdict, several keys of one web-features feature resolve to the feature as verdict ambiguous with compat_keys, and matches spanning two features are a miss. Off by default so a typo returns a miss you can correct rather than a confident answer about the wrong feature.',
       ),
   }),
 

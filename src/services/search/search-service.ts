@@ -1,12 +1,13 @@
 /**
  * @fileoverview Search service — one in-memory row per searchable entity (every
  * BCD leaf plus every web-features entry that owns no BCD keys), ranked in six
- * named tiers with a `matched_on` echo rather than a composite score.
+ * named tiers with a `matched_on` echo rather than a composite score, and
+ * filterable by namespace, Baseline state, web-features group, and snapshot.
  * @module services/search/search-service
  */
 
 import { getBaselineService } from '@/services/baseline/baseline-service.js';
-import type { BaselineState } from '@/services/baseline/types.js';
+import type { BaselineState, WebFeature } from '@/services/baseline/types.js';
 import { getBcdService } from '@/services/bcd/bcd-service.js';
 import { getTargetsService } from '@/services/targets/targets-service.js';
 import type { IndexRow, MatchedOn, SearchFilters, SearchHit } from './types.js';
@@ -59,15 +60,37 @@ export function stripTags(value: string): string {
 }
 
 /**
- * Normalize text for both the index and the query: strip tags, split camelCase,
- * lowercase, drop punctuation except `-`, then split on whitespace and dots.
+ * Normalize text for both the index and the query: split camelCase, lowercase,
+ * drop punctuation except `-` (`<` and `>` included, so `<dialog>` keeps
+ * `dialog`), then split on whitespace and dots. Markup is stripped only from
+ * BCD descriptions, by `stripTags`, before they reach this function.
  */
 export function tokenize(value: string): string[] {
-  const withoutTags = value.replace(/<[^>]*>/g, ' ');
-  const camelSplit = withoutTags.replace(/([a-z0-9])([A-Z])/g, '$1 $2');
+  const camelSplit = value.replace(/([a-z0-9])([A-Z])/g, '$1 $2');
   const cleaned = camelSplit.toLowerCase().replace(/[^a-z0-9\s.-]/g, ' ');
   return cleaned.split(/[\s.]+/).filter(Boolean);
 }
+
+/**
+ * Split a query into the path segments the `path_suffix` tier compares against
+ * a BCD key: lowercase, drop a trailing `()`, split on `.`, `:`, and whitespace,
+ * and drop a `prototype` segment sitting between two others, so
+ * `Array.prototype.at()` and `display: grid` read as `array.at` and `display.grid`.
+ */
+export function querySegments(value: string): string[] {
+  const segments = value
+    .trim()
+    .replace(/\(\)$/, '')
+    .toLowerCase()
+    .split(/[\s.:]+/)
+    .filter(Boolean);
+  return segments.filter(
+    (segment, index) => segment !== 'prototype' || index === 0 || index === segments.length - 1,
+  );
+}
+
+/** Fewest query segments the `path_suffix` tier accepts; one segment is shared too widely. */
+const MIN_SUFFIX_SEGMENTS = 2;
 
 /** True when every query token appears inside some token of the field. */
 function containsAll(fieldTokens: string[], queryTokens: string[]): boolean {
@@ -84,6 +107,8 @@ export class SearchService {
   private readonly byFeatureId: Map<string, IndexRow[]>;
   private readonly aliasToTarget: Map<string, string>;
   private readonly exactNames: Map<string, IndexRow[]>;
+  /** Rows keyed by the lowercased last segment of their BCD key, with the whole key's segments. */
+  private readonly byLastSegment: Map<string, { row: IndexRow; segments: string[] }[]>;
 
   constructor(rows: IndexRow[], aliasToTarget: Map<string, string>) {
     this.rows = rows;
@@ -91,8 +116,16 @@ export class SearchService {
     this.byBcdKey = new Map();
     this.byFeatureId = new Map();
     this.exactNames = new Map();
+    this.byLastSegment = new Map();
     for (const row of rows) {
-      if (row.bcd_key !== undefined) this.byBcdKey.set(row.bcd_key, row);
+      if (row.bcd_key !== undefined) {
+        this.byBcdKey.set(row.bcd_key, row);
+        const segments = row.bcd_key.toLowerCase().split('.');
+        const last = segments[segments.length - 1] as string;
+        const bucket = this.byLastSegment.get(last);
+        if (bucket) bucket.push({ row, segments });
+        else this.byLastSegment.set(last, [{ row, segments }]);
+      }
       if (row.baseline_id !== undefined) {
         const bucket = this.byFeatureId.get(row.baseline_id);
         if (bucket) bucket.push(row);
@@ -114,9 +147,10 @@ export class SearchService {
   }
 
   /**
-   * Rank every matching row. Tier 1 and 2 are exact matches; tiers 3 to 6 widen
-   * from name to last path segment to description to the whole path. Within a
-   * tier: shorter BCD path, then namespace priority, then Baseline, then key.
+   * Rank every matching row. Tier 1 and 2 are exact matches (tier 2 includes a
+   * BCD key whose trailing segments equal the query's); tiers 3 to 6 widen from
+   * name to last path segment to description to the whole path. Within a tier:
+   * shorter BCD path, then namespace priority, then Baseline, then key.
    */
   rank(query: string, filters: SearchFilters): SearchHit[] {
     const trimmed = query.trim();
@@ -127,6 +161,8 @@ export class SearchService {
     const consider = (row: IndexRow, tier: number, matchedOn: MatchedOn): void => {
       if (filters.namespace !== undefined && row.namespace !== filters.namespace) return;
       if (filters.baseline !== undefined && row.baseline_state !== filters.baseline) return;
+      if (filters.group !== undefined && !row.groups.includes(filters.group)) return;
+      if (filters.snapshot !== undefined && !row.snapshots.includes(filters.snapshot)) return;
       const existing = best.get(row);
       if (existing && existing.tier <= tier) return;
       best.set(row, { row, tier, matched_on: matchedOn });
@@ -147,6 +183,18 @@ export class SearchService {
           ? 'name'
           : 'caniuse_title';
       consider(row, 2, matchedOn);
+    }
+
+    const segments = querySegments(trimmed);
+    const lastSegment = segments[segments.length - 1];
+    if (segments.length >= MIN_SUFFIX_SEGMENTS && lastSegment !== undefined) {
+      for (const candidate of this.byLastSegment.get(lastSegment) ?? []) {
+        const start = candidate.segments.length - segments.length;
+        if (start < 0) continue;
+        if (segments.every((segment, index) => candidate.segments[start + index] === segment)) {
+          consider(candidate.row, 2, 'path_suffix');
+        }
+      }
     }
 
     for (const row of this.rows) {
@@ -212,6 +260,19 @@ async function loadSearchService(): Promise<SearchService> {
     return undefined;
   };
 
+  /** A feature's own groups plus every ancestor, so a filter on a parent reaches its descendants. */
+  const groupsFor = (feature: WebFeature | undefined): string[] => {
+    const expanded = new Set<string>();
+    for (const start of feature?.group ?? []) {
+      let id: string | undefined = start;
+      while (id !== undefined && !expanded.has(id)) {
+        expanded.add(id);
+        id = baseline.groups[id]?.parent;
+      }
+    }
+    return [...expanded];
+  };
+
   const rows: IndexRow[] = [];
 
   for (const [key, leaf] of bcd.entries()) {
@@ -237,6 +298,8 @@ async function loadSearchService(): Promise<SearchService> {
       caniuseTitleTokens: caniuseTitle === undefined ? [] : tokenize(caniuseTitle),
       lastSegmentTokens: tokenize(segments[segments.length - 1] as string),
       pathTokens: tokenize(key),
+      groups: groupsFor(feature),
+      snapshots: [...(feature?.snapshot ?? [])],
     });
   }
 
@@ -262,6 +325,8 @@ async function loadSearchService(): Promise<SearchService> {
       caniuseTitleTokens: caniuseTitle === undefined ? [] : tokenize(caniuseTitle),
       lastSegmentTokens: tokenize(id),
       pathTokens: tokenize(id),
+      groups: groupsFor(entry),
+      snapshots: [...(entry.snapshot ?? [])],
     });
   }
 

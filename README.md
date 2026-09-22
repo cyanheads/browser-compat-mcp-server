@@ -38,7 +38,7 @@ Web platform compatibility for frontend work: per-browser support from MDN's `@m
 | `browsercompat_list_reference` | Enumerate the reference vocabulary the other tools expect — BCD namespaces and browser ids, browserslist agents, Baseline states, groups, and ECMAScript snapshots. |
 | `browsercompat_get_feature` | Full compatibility record for one feature: Baseline state, standards status, per-browser versions with flags and prefixes, MDN and specification links. |
 | `browsercompat_check_baseline` | Ship-or-not across up to 20 features: Baseline state and date, the limiting browser, deprecation flags, and the traffic share requiring it would exclude. |
-| `browsercompat_search_features` | Find features by plain name or keyword when the canonical key is unknown, ranked with the field that matched. |
+| `browsercompat_search_features` | Find features by plain name, keyword, or code notation when the canonical key is unknown, ranked with the field that matched, filterable by group or ECMAScript snapshot, and pageable. |
 | `browsercompat_compare_support` | Check features against an explicit browserslist target query, reporting the failing target per feature and every target that could not be evaluated. |
 
 ---
@@ -47,8 +47,9 @@ Web platform compatibility for frontend work: per-browser support from MDN's `@m
 
 ### `browsercompat_list_reference` <sub>tool</sub>
 
-- One required `topic`: `bcd_namespaces` (12), `bcd_browsers` (17), `browserslist_agents` (19), `baseline_states` (4), `groups` (103), `snapshots` (11)
+- One required `topic`: `bcd_namespaces` (12), `bcd_browsers` (17), `browserslist_agents` (19), `baseline_states` (4), `groups` (104), `snapshots` (11)
 - Entries carry `id`, `label`, and `detail`, plus `count`, `reported`, `bcd_browser`, `usage_percent`, `maps_from`, or `spec_url` where the topic has them
+- `groups` and `snapshots` ids are the values `browsercompat_search_features` takes as `group` and `snapshot`
 - `browserslist_agents` gives each agent's browser-compat-data counterpart or `null` — the `null` ones can never be evaluated and always land in `unchecked_targets`
 
 ---
@@ -56,7 +57,7 @@ Web platform compatibility for frontend work: per-browser support from MDN's `@m
 ### `browsercompat_get_feature` <sub>tool</sub>
 
 - One `feature` string, 1–200 characters: a BCD key (`css.selectors.has`) or a web-features id (`has`); `resolved_as` echoes which one matched and how
-- `resolve: true` accepts the search index's single unambiguous top hit; off by default, so a typo returns a miss rather than a confident answer about the wrong feature
+- `resolve: true` falls back to the search index for a plain name or notation (`Container queries`, `Element.prototype.animate`) and accepts its best exact matches only when they name one feature: one key resolves to that key, several keys of one feature resolve to the feature with `compat_keys`, and two features are a miss. Off by default, so a typo returns a miss rather than a confident answer about the wrong feature
 - `include_runtimes: true` adds `bun`, `deno`, `nodejs`, and `oculus` rows to the 13 reported desktop and mobile browsers
 - `outcome` is `found` | `no_compat_data` | `miss` — a miss is `found: false` with `guidance`, never an error
 - A web-features id spanning more than one BCD key omits the per-key fields (`support`, `status`, `limiting_browser`, `mdn_url`, `spec_urls`) and returns `compat_keys` to re-call with
@@ -76,11 +77,13 @@ Web platform compatibility for frontend work: per-browser support from MDN's `@m
 
 ### `browsercompat_search_features` <sub>tool</sub>
 
-- `query` 1–100 characters, with optional `namespace` (one of the 12 BCD namespaces) and `baseline` (`widely` | `newly` | `limited` | `not_mapped`) filters; `limit` 1–50, default 10
-- Every hit carries `matched_on`, the field that matched, so the six-tier ranking is inspectable rather than a score
+- `query` 1–100 characters: a plain name, a keyword, or code notation such as `Array.prototype.at`, `display: grid`, or `<dialog>`
+- Optional filters, combinable: `namespace` (one of the 12 BCD namespaces), `baseline` (`widely` | `newly` | `limited` | `not_mapped`), `group` (a web-features group, nested groups included), and `snapshot` (an ECMAScript edition such as `ecmascript-2023`)
+- `limit` 1–50, default 10, and `offset` (default 0) to page through the full ranking; `nextOffset` is present while matches remain
+- Every hit carries `matched_on`, the field that matched, so the six-tier ranking is inspectable rather than a score; `path_suffix` marks a key whose trailing segments match the dotted or property-value notation typed
 - `support_summary` is one line across the seven Baseline core browsers, with `—` for unsupported and `?` for unknown
-- Zero hits are a successful empty result plus a notice naming which filter to drop; `totalCount` and `truncated` report matches beyond `limit`
-- Typed failure: `invalid_query` (a query that normalizes to zero tokens)
+- Zero hits are a successful empty result plus a notice naming which filter to drop; `totalCount` counts every match, and an `offset` past it returns an empty page with a notice
+- Typed failures: `invalid_query` (a query that normalizes to zero tokens), `unknown_group`, `unknown_snapshot`
 
 ---
 
@@ -98,8 +101,8 @@ Web platform compatibility for frontend work: per-browser support from MDN's `@m
 
 | Package | Version | License | Supplies |
 |:---|:---|:---|:---|
-| [`@mdn/browser-compat-data`](https://github.com/mdn/browser-compat-data) | `^8.1.1` | CC0-1.0 | Per-browser support, standards status, MDN and specification links |
-| [`web-features`](https://github.com/web-platform-dx/web-features) | `^3.38.0` | Apache-2.0 | Baseline state and dates, discouraged flags, groups, ECMAScript snapshots |
+| [`@mdn/browser-compat-data`](https://github.com/mdn/browser-compat-data) | `^8.1.2` | CC0-1.0 | Per-browser support, standards status, MDN and specification links |
+| [`web-features`](https://github.com/web-platform-dx/web-features) | `^3.39.0` | Apache-2.0 | Baseline state and dates, discouraged flags, groups, ECMAScript snapshots |
 | [`caniuse-lite`](https://github.com/browserslist/caniuse-lite) | `^1.0.30001810` | CC-BY-4.0 | Usage weighting, plus feature titles for the search index |
 | [`browserslist`](https://github.com/browserslist/browserslist) | `^4.29.0` | MIT | Target query resolution and coverage figures |
 
@@ -115,7 +118,7 @@ Browser-compat-specific:
 
 - All four datasets are bundled and loaded in process — no runtime network calls, no API key, no rate limit, and nothing to configure
 - Baseline is read per browser-compat-data key from `status.by_compat_key`, never rolled up from the feature level, because keys under one feature legitimately disagree
-- One shared resolver behind every tool: exact BCD key, then web-features id, then a `moved` redirect, and only under `resolve: true` the search index's single unambiguous hit
+- One shared resolver behind every tool: exact BCD key, then web-features id, then a `moved` redirect, and only under `resolve: true` the search index's best exact matches, when they name one feature
 - Target versions are ordered by browser-compat-data's release index rather than parsed version strings, with the caniuse spellings normalized both directions (`safari 16.0` ↔ `16`, `samsung 20` ↔ `20.0`)
 
 Agent-friendly output:

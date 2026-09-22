@@ -12,6 +12,7 @@ export type MatchedOn =
   | 'baseline_id'
   | 'name'
   | 'caniuse_title'
+  | 'path_suffix'
   | 'path_segment'
   | 'description'
   | 'path_tokens';
@@ -25,6 +26,8 @@ export interface IndexRow {
   caniuseTitleTokens: string[];
   description?: string;
   descriptionTokens: string[];
+  /** web-features groups of this row's feature plus every ancestor group; empty without a feature. */
+  groups: string[];
   lastSegmentTokens: string[];
   mdn_url?: string;
   name?: string;
@@ -32,6 +35,8 @@ export interface IndexRow {
   nameTokens: string[];
   pathSegmentCount: number;
   pathTokens: string[];
+  /** ECMAScript snapshots of this row's feature; empty without a feature. */
+  snapshots: string[];
 }
 
 /** A ranked match: the row, the tier it landed in, and the field that matched. */
@@ -44,5 +49,9 @@ export interface SearchHit {
 /** Optional restrictions applied before ranking. */
 export interface SearchFilters {
   baseline?: BaselineState;
+  /** A web-features group id; matches the group and every group nested under it. */
+  group?: string;
   namespace?: string;
+  /** An ECMAScript snapshot id. */
+  snapshot?: string;
 }

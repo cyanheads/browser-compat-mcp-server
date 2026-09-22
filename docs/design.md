@@ -9,7 +9,7 @@
 | `browsercompat_list_reference` | Enumerate the vocabulary the other tools expect: BCD namespaces, BCD browser ids, browserslist agent ids and their BCD counterparts, Baseline states, web-features groups, and ECMAScript snapshots. | `topic: 'bcd_namespaces' \| 'bcd_browsers' \| 'browserslist_agents' \| 'baseline_states' \| 'groups' \| 'snapshots'` | `readOnlyHint`, `idempotentHint`, `openWorldHint: false` |
 | `browsercompat_get_feature` | Get the full compatibility record for one web feature: Baseline state and date, deprecation and standards status, per-browser version-added/removed with flags, prefixes and partial-implementation notes, and MDN/spec links. | `feature: string`, `resolve?: boolean`, `include_runtimes?: boolean` | `readOnlyHint`, `idempotentHint`, `openWorldHint: false` |
 | `browsercompat_check_baseline` | Check whether one or more features are safe to ship: Baseline state and date, the limiting browser and version, deprecated/discouraged flags, and the share of tracked global traffic that would be excluded. | `features: string[]`, `resolve?: boolean` | `readOnlyHint`, `idempotentHint`, `openWorldHint: false` |
-| `browsercompat_search_features` | Find web features by plain name or keyword when the canonical key is unknown, across CSS, JavaScript, HTML, Web APIs, SVG, MathML, WebAssembly, and HTTP headers. | `query: string`, `namespace?: string`, `baseline?: string`, `limit?: number` | `readOnlyHint`, `idempotentHint`, `openWorldHint: false` |
+| `browsercompat_search_features` | Find web features by plain name or keyword when the canonical key is unknown, across CSS, JavaScript, HTML, Web APIs, SVG, MathML, WebAssembly, and HTTP headers. | `query: string`, `namespace?: string`, `baseline?: string`, `group?: string`, `snapshot?: string`, `limit?: number`, `offset?: number` | `readOnlyHint`, `idempotentHint`, `openWorldHint: false` |
 | `browsercompat_compare_support` | Compute whether a set of features clears an explicit browserslist target query, reporting the failing target per feature and the target browsers that could not be evaluated. | `features: string[]`, `targets: string`, `resolve?: boolean` | `readOnlyHint`, `idempotentHint`, `openWorldHint: false` |
 
 ### Resources
@@ -72,49 +72,49 @@ No tool declares a `title`. Every natural per-tool title (`Get Feature`, `Check 
 
 ## Data Sources — verified shapes
 
-Probed 2026-09-19 against the installed tree. Every count and field below was read out of the actual data, not the package docs.
+Counts, fields, and sizes probed 2026-09-22 against the installed tree; cold-load times and resident memory are from the 2026-09-19 probe of the prior data snapshot. Every count and field below was read out of the actual data, not the package docs.
 
 | Package | Version | License | On disk | Gzipped | Cold load |
 |:--------|:--------|:--------|:--------|:--------|:----------|
-| `@mdn/browser-compat-data` | 8.1.1 | CC0-1.0 | 19 MB (`data.json` 20,207,952 B) | 934,895 B | 52 ms |
-| `web-features` | 3.38.0 | Apache-2.0 | 4.6 MB (`data.json` 4,711,595 B) | 397,504 B | 20 ms |
+| `@mdn/browser-compat-data` | 8.1.2 | CC0-1.0 | 19 MB (`data.json` 20,226,380 B) | 935,372 B | 52 ms |
+| `web-features` | 3.39.0 | Apache-2.0 | 4.6 MB (`data.json` 4,755,440 B) | 400,834 B | 20 ms |
 | `caniuse-lite` | 1.0.30001810 | CC-BY-4.0 | 4.2 MB (1,459,992 B across 583 feature files) | 368,640 B (whole dir, tar.gz) | 34 ms (with browserslist) |
 | `browserslist` | 4.29.0 | MIT | 104 KB | — | (above) |
 
 Total `node_modules` for the four: **28 MB on disk, ~1.7 MB compressed**. Resident memory after loading all four and building a flat leaf index: **141.8 MB RSS** (12.6 MB baseline).
 
-### BCD (`@mdn/browser-compat-data` 8.1.1)
+### BCD (`@mdn/browser-compat-data` 8.1.2)
 
 ```
-__meta: { "timestamp": "2026-09-10T16:02:02.250Z", "version": "8.1.1" }
+__meta: { "timestamp": "2026-09-17T12:01:51.601Z", "version": "8.1.2" }
 ```
 
 `__meta` carries exactly two fields — a version and a generation timestamp. There is no separate release-date field.
 
-**12 top-level namespaces**, 20,517 `__compat` leaves:
+**12 top-level namespaces**, 20,543 `__compat` leaves:
 
 | Namespace | Leaves | Namespace | Leaves |
 |:---|---:|:---|---:|
-| `api` | 10,251 | `svg` | 443 |
-| `css` | 4,065 | `http` | 413 |
+| `api` | 10,265 | `svg` | 443 |
+| `css` | 4,071 | `http` | 414 |
 | `webextensions` | 2,075 | `webassembly` | 333 |
-| `javascript` | 1,396 | `mathml` | 137 |
+| `javascript` | 1,400 | `mathml` | 137 |
 | `html` | 824 | `manifests` | 38 |
-| `webdriver` | 525 | `mediatypes` | 17 |
+| `webdriver` | 526 | `mediatypes` | 17 |
 
-**`__compat` leaf fields** (frequency out of 20,517):
+**`__compat` leaf fields** (frequency out of 20,543):
 
 | Field | Count | Notes |
 |:------|------:|:------|
-| `support` | 20,517 | always present |
-| `source_file` | 20,517 | internal to BCD; not surfaced |
-| `status` | 18,442 | **absent on all 2,075 `webextensions` leaves** |
-| `spec_url` | 17,204 (83.9%) | string, or an array of strings (604 leaves) |
-| `tags` | 15,570 (75.9%) | 16,348 refs, all `web-features:<id>`, 1,180 distinct ids; 777 leaves carry more than one |
-| `mdn_url` | 12,489 (60.9%) | |
-| `description` | 5,071 (24.7%) | HTML-bearing, e.g. `<code>AbortController()</code> constructor` |
+| `support` | 20,543 | always present |
+| `source_file` | 20,543 | internal to BCD; not surfaced |
+| `status` | 18,468 | **absent on all 2,075 `webextensions` leaves** |
+| `spec_url` | 17,240 (83.9%) | string, or an array of strings (604 leaves) |
+| `tags` | 15,566 (75.8%) | 16,344 refs, all `web-features:<id>`, 1,181 distinct ids; 777 leaves carry more than one |
+| `mdn_url` | 12,509 (60.9%) | |
+| `description` | 5,070 (24.7%) | HTML-bearing, e.g. `<code>AbortController()</code> constructor` |
 
-`status` is always `{ deprecated, experimental, standard_track }`, all three always present when `status` is. Counts: 1,182 deprecated, 3,014 experimental, 1,225 not standard-track.
+`status` is always `{ deprecated, experimental, standard_track }`, all three always present when `status` is. Counts: 1,181 deprecated, 3,020 experimental, 1,215 not standard-track.
 
 **`browsers`** — 17 entries, each `{ name, type, releases, accepts_flags, accepts_webextensions?, pref_url?, preview_name?, upstream? }`:
 
@@ -140,42 +140,42 @@ __meta: { "timestamp": "2026-09-10T16:02:02.250Z", "version": "8.1.1" }
 
 Each release entry is `{ index, status, release_date?, release_notes?, engine?, engine_version? }`. `status` ∈ `retired | current | beta | nightly | planned | esr`. **`index` is a unique integer 0..n−1 per browser, in release order** — verified unique for all 17 browsers. `Object.keys(releases)` is *not* ordered: `safari` yields `… 17, 18, 26, 27, 1.1, 1.2, … 3.1, 5.1, 9.1`.
 
-**Support statements** (289,023 statements across 280,166 browser entries):
+**Support statements** (289,419 statements across 280,571 browser entries):
 
 | Shape | Count |
 |:------|------:|
-| entry is a single statement object | 272,010 |
-| entry is an array of statements | 8,156 (max length 6) |
+| entry is a single statement object | 272,425 |
+| entry is an array of statements | 8,146 (max length 6) |
 
-Statement field frequency: `version_added` 289,023 · `notes` 13,245 · `version_removed` 7,549 · `version_last` 7,549 · `partial_implementation` 5,663 · `impl_url` 3,714 · `prefix` 2,803 · `flags` 2,132 · `alternative_name` 1,732.
+Statement field frequency: `version_added` 289,419 · `notes` 13,219 · `version_removed` 7,529 · `version_last` 7,529 · `partial_implementation` 5,643 · `impl_url` 3,664 · `prefix` 2,801 · `flags` 2,102 · `alternative_name` 1,708.
 
-`version_added` forms — **four, and only four**: numeric string (223,950), `false` (58,412), `≤`-prefixed (5,776; e.g. `≤12.1`, `≤80`), and the literal `"preview"` (885). No `true`, no `null`. `version_removed` takes the same forms minus `false`. `version_last` always co-occurs with `version_removed` and is the last release that still supported the feature.
+`version_added` forms — **four, and only four**: numeric string (224,284), `false` (58,449), `≤`-prefixed (5,776; e.g. `≤12.1`, `≤80`), and the literal `"preview"` (910). No `true`, no `null`. `version_removed` takes the same forms minus `false`. `version_last` always co-occurs with `version_removed` and is the last release that still supported the feature.
 
-`notes` is a string (11,868) or an array of strings (1,377). `flags` entries are `{ name, type, value_to_set? }` with `type` ∈ `preference` (1,890) | `runtime_flag` (275). `prefix` values are heterogeneous: `-webkit-`, `webkit`, `WebKit`, `WEBKIT_`, `moz`, `-moz-`, `MOZ_`, `ms`, `-ms-`, `MS`, `o`, `O`, `-o-`, `-khtml-`, `-webkit-input-`, `-ms-input-`, `X-`.
+`notes` is a string (11,839) or an array of strings (1,380). `flags` entries are `{ name, type, value_to_set? }` with `type` ∈ `preference` (1,860) | `runtime_flag` (275). `prefix` values are heterogeneous: `-webkit-`, `webkit`, `WebKit`, `WEBKIT_`, `moz`, `Moz`, `-moz-`, `MOZ_`, `ms`, `-ms-`, `MS`, `o`, `O`, `-o-`, `-khtml-`, `-webkit-input-`, `-ms-input-`, `X-`.
 
-Array statements are **not reliably ordered**: 7,856 of 8,156 (96.3%) are descending by `version_added`, the rest are not — e.g. `api.DOMMatrix [firefox] ["33","49","1.5"]`.
+Array statements are **not reliably ordered**: 7,859 of 8,146 (96.5%) are non-increasing by `version_added` (compared segment by segment as numbers, `≤` stripped, `false` and `"preview"` skipped), the rest are not — e.g. `api.DOMMatrix [firefox] ["33","49","1.5"]`.
 
-A browser can be **absent** from a leaf's `support` map, which is distinct from `version_added: false`. Per-browser entry counts: `chrome`/`edge`/`firefox`/`firefox_android`/`opera`/`safari`/`safari_ios` 20,517 · `chrome_android`/`ie`/`opera_android`/`samsunginternet_android`/`webview_android`/`webview_ios` 18,442 · `oculus` 18,389 · `deno` 3,170 · `nodejs` 2,289 · `bun` 2,047.
+A browser can be **absent** from a leaf's `support` map, which is distinct from `version_added: false`. Per-browser entry counts: `chrome`/`edge`/`firefox`/`firefox_android`/`opera`/`safari`/`safari_ios` 20,543 · `chrome_android`/`ie`/`opera_android`/`samsunginternet_android`/`webview_android`/`webview_ios` 18,468 · `oculus` 18,415 · `deno` 3,173 · `nodejs` 2,324 · `bun` 2,050.
 
-### web-features 3.38.0
+### web-features 3.39.0
 
-Module exports `{ features, groups, snapshots, browsers }`. 1,203 features, 103 groups, 11 snapshots. `browsers` names the 7-browser Baseline core set: `chrome`, `chrome_android`, `edge`, `firefox`, `firefox_android`, `safari`, `safari_ios`.
+Module exports `{ features, groups, snapshots, browsers }`. 1,210 entries in `features` (1,198 of them real features, 12 redirects), 104 groups, 11 snapshots. `browsers` names the 7-browser Baseline core set: `chrome`, `chrome_android`, `edge`, `firefox`, `firefox_android`, `safari`, `safari_ios`.
 
-`kind`: `feature` 1,191 · `moved` 10 · `split` 2. The 12 non-`feature` entries have no `status` and carry `redirect_target` (10) or `redirect_targets` (2) instead.
+`kind`: `feature` 1,198 · `moved` 10 · `split` 2. The 12 non-`feature` entries have no `status` and carry `redirect_target` (10) or `redirect_targets` (2) instead.
 
-Field frequency: `kind` 1,203 · `description` / `description_html` / `name` / `spec` / `status` 1,191 · `compat_features` 1,168 · `group` 929 · `caniuse` 333 · `discouraged` 55 · `snapshot` 45.
+Field frequency: `kind` 1,210 · `description` / `description_html` / `name` / `spec` / `status` 1,198 · `compat_features` 1,177 · `group` 939 · `caniuse` 339 · `discouraged` 56 · `snapshot` 45.
 
 `status` is `{ baseline, baseline_low_date?, baseline_high_date?, by_compat_key?, support }`.
 
-**`status.baseline` raw values are `"high"` (646), `"low"` (117), and `false` (428)** — not the display words. `baseline_low_date` present on 763, `baseline_high_date` on 646. Two `baseline_low_date` values are `≤`-prefixed (`≤2020-03-24`, `≤2018-10-02`).
+**`status.baseline` raw values are `"high"` (646), `"low"` (123), and `false` (429)** — not the display words. `baseline_low_date` present on 769, `baseline_high_date` on 646. Two `baseline_low_date` values are `≤`-prefixed (`≤2020-03-24`, `≤2018-10-02`).
 
-`status.by_compat_key` is present on 1,168 features and covers **15,292 distinct BCD keys**, each owned by exactly one feature. Every one of those keys is a real BCD leaf (0 orphans). Each value is `{ baseline, baseline_low_date?, baseline_high_date?, support }` — the same shape as the rollup, computed per key. Verified divergence: `grid` rolls up to `high` / 2020-04-17 while its 62 per-key entries carry several distinct states.
+`status.by_compat_key` is present on 1,177 features and covers **15,482 distinct BCD keys**, each owned by exactly one feature. Every one of those keys is a real BCD leaf (0 orphans). Each value is `{ baseline, baseline_low_date?, baseline_high_date?, support }` — the same shape as the rollup, computed per key. Verified divergence: `grid` rolls up to `high` / 2020-04-17 while its 62 per-key entries carry several distinct states.
 
-`compat_features` totals 15,292 refs across 1,168 features — the same set `by_compat_key` covers.
+`compat_features` totals 15,482 refs across 1,177 features — the same set `by_compat_key` covers.
 
-`discouraged` is `{ according_to: string[], reason: string, reason_html: string }`, on 55 features.
+`discouraged` is `{ according_to: string[], reason: string, reason_html: string }`, on 56 features.
 
-`group`, `snapshot`, `spec`, and `caniuse` are all **arrays of strings**. Groups are `{ name }`; snapshots are `{ name, spec }` and are the 11 ECMAScript editions (`ecmascript-1`, `ecmascript-5`, `ecmascript-2015` … `ecmascript-2023`).
+`group`, `snapshot`, `spec`, and `caniuse` are all **arrays of strings**. Groups are `{ name, parent? }`: 53 of the 104 declare a `parent`, nested at most two levels below a top-level group (`positioning` → `layout` → `css`), and top-level groups hold few features directly (`css` 101 direct, 355 with descendants; `html` 16 and 147). Snapshots are `{ name, spec }` and are the 11 ECMAScript editions (`ecmascript-1`, `ecmascript-5`, `ecmascript-2015` … `ecmascript-2023`).
 
 ### caniuse-lite 1.0.30001810 and browserslist 4.29.0
 
@@ -212,9 +212,9 @@ The resulting `data_version` value, computed once and echoed on every tool respo
 
 ```ts
 data_version: {
-  bcd: string,            // "8.1.1"       — bcd.__meta.version
-  bcd_generated: string,  // "2026-09-10T16:02:02.250Z" — bcd.__meta.timestamp
-  web_features: string,   // "3.38.0"
+  bcd: string,            // "8.1.2"       — bcd.__meta.version
+  bcd_generated: string,  // "2026-09-17T12:01:51.601Z" — bcd.__meta.timestamp
+  web_features: string,   // "3.39.0"
   caniuse_lite: string,   // "1.0.30001810"
   browserslist: string,   // "4.29.0"
 }
@@ -228,14 +228,14 @@ These seven rules are shared by every tool. Implement them once in the service l
 
 ### 1. Feature resolution
 
-Every tool takes the same `feature` string and resolves it in a fixed order. BCD keys always contain a dot and web-features ids never do (verified: 0 of 1,203 ids contain a dot, 0 BCD leaf paths are a single segment, and no leaf path equals an id), so the namespaces cannot collide.
+Every tool takes the same `feature` string and resolves it in a fixed order. BCD keys always contain a dot and web-features ids never do (verified: 0 of 1,210 ids contain a dot, 0 BCD leaf paths are a single segment, and no leaf path equals an id), so the namespaces cannot collide.
 
 1. Trim. The bound is enforced before the resolver runs, split across two surfaces: the input schema rejects an empty or over-200-character string by name, and a whitespace-only string — the one case a length validator cannot express — reaches the handler as `invalid_feature_input`. Enforcing either bound in both places would leave the contract entry unreachable while still reading as covered.
-2. **Exact BCD key**, case-sensitive, against the 20,517-key leaf index.
-3. **Exact web-features id**, case-sensitive, against the 1,203 ids.
+2. **Exact BCD key**, case-sensitive, against the 20,543-key leaf index.
+3. **Exact web-features id**, case-sensitive, against the 1,210 ids.
 4. **Lowercased retry of step 3 only.** All web-features ids match `^[a-z0-9-]+$`, so lowercasing is unambiguous there. It is *not* applied to BCD keys: four pairs collide case-insensitively — `api.Crypto`/`api.crypto`, `api.Origin`/`api.origin`, `api.Performance`/`api.performance`, `api.Scheduler`/`api.scheduler`.
 5. **Redirect follow.** A hit whose `kind` is `moved` or `split` has no `status`. With a single `redirect_target`, follow it once and report `resolved_via: 'redirect'`. With `redirect_targets` — 2 `split` entries in the current data, one with 2 targets and one with 3 (`text-wrap-style` → `text-wrap`, `text-wrap-balance`, `text-wrap-pretty`) — return a miss whose `guidance` names every target, not a fixed count of them.
-6. **`resolve: true` only** — run the search ranking and accept the top hit only when it lands in tier 1 or 2 and no other row shares that tier. Otherwise treat as a miss. Report `resolved_via: 'search'`.
+6. **`resolve: true` only** — run the search ranking and take every row in the top tier, which must be tier 1 or 2. When that tier holds exact-label rows (key, id, `name`, or `caniuse_title`) alongside `path_suffix` rows, only the exact-label rows count. Group those rows by entity: their `baseline_id`, or their `bcd_key` for a row no feature covers. One group of one row resolves to that row's key (or, for a feature with no keys, its id). One group of several rows resolves through the feature id, as step 3 would (`bcd_key: null` plus `compat_keys`). Two or more groups, or a top tier above 2, is a miss. Report `resolved_via: 'search'`. The grouping matters because the index joins a feature's `name` onto every key it owns: an exact name on a multi-key feature fills tier 2 with one row per key. Counting rows instead of entities resolved 230 of the 899 feature names that reached this step in web-features 3.38.0; counting entities, together with the `path_suffix` tier and tag-shaped names in §6, resolves all 907 that reach it in 3.39.0. The exact-label precedence is what keeps three of those: `window.external`, `import defer`, and `navigator.install()` are feature names whose `path_suffix` reading also lands on a key the feature does not own (`api.Window.external`, the two `import.defer` keys, `api.Navigator.install`), which would otherwise make a second entity.
 7. Miss → `{ found: false, resolved_as: null, guidance }`.
 
 Every response echoes:
@@ -268,7 +268,7 @@ resolved_as: {
 
 `supportAt(leaf, bcdBrowserId, targetIndex)`:
 
-1. `support[bcdBrowserId]` absent → `unknown`. **Absence is not `false`** — six browsers carry entries on only 18,442 of 20,517 leaves.
+1. `support[bcdBrowserId]` absent → `unknown`. **Absence is not `false`** — six browsers carry entries on only 18,468 of 20,543 leaves.
 2. Normalize the entry to an array. Evaluate every statement; do not assume the first is current.
 3. Per statement:
    - `version_added: false` → never applies.
@@ -341,39 +341,43 @@ Read from `status.by_compat_key[bcdKey]` when resolving a BCD key, and from the 
 | `widely` | `status.baseline === 'high'` |
 | `newly` | `status.baseline === 'low'` |
 | `limited` | `status.baseline === false` |
-| `not_mapped` | the BCD key appears in no `by_compat_key` — 5,225 leaves (25.5%) |
+| `not_mapped` | the BCD key appears in no `by_compat_key` — 5,061 leaves (24.6%) |
 
 `not_mapped` is an explicit state with an explicit reason, never an absent field.
 
 Dates: `since_date` from `baseline_low_date` (when the feature became newly available), `high_date` from `baseline_high_date` (when it became widely available). Pass `≤`-prefixed dates through verbatim with `date_is_upper_bound: true` rather than parsing them.
 
-285 leaves carry a `web-features:` tag but have no `by_compat_key` entry (e.g. `api.Animation.commitStyles.endpoint_inclusive_commitStyles` tagged `web-features:web-animations`). Those report `baseline: not_mapped` while still populating `resolved_as.baseline_id` from the tag. 777 leaves carry more than one tag. The tag is a hint for the feature id; `by_compat_key` is the authority for Baseline.
+288 leaves carry a `web-features:` tag but have no `by_compat_key` entry (e.g. `api.Animation.commitStyles.endpoint_inclusive_commitStyles` tagged `web-features:web-animations`). Those report `baseline: not_mapped` while still populating `resolved_as.baseline_id` from the tag. 777 leaves carry more than one tag. The tag is a hint for the feature id; `by_compat_key` is the authority for Baseline.
 
-23 `kind: feature` entries have no `compat_features` at all — `ad-selection`, `canvas-html`, `color-contrast`, `declarative-webmcp`, `document-modelcontext`, `focusgroup`, `http2`, `http3`, `image-function`, `import-defer`, `install`, `intersection-observer-v2`, `manifest-localization`, `masonry`, `mixin`, `navigator-install`, `notifications-apps`, `opaquerange`, `portal`, `rhythmic-sizing`, `target-within`, `usermedia`, `webdriver-bidi`. Resolving one is `found: true` with an empty `support` array and `outcome: 'no_compat_data'`.
+21 `kind: feature` entries have no `compat_features` at all — `ad-selection`, `canvas-html`, `color-contrast`, `declarative-webmcp`, `document-modelcontext`, `focusgroup`, `http2`, `http3`, `image-function`, `import-defer`, `install`, `intersection-observer-v2`, `manifest-localization`, `mixin`, `navigator-install`, `notifications-apps`, `opaquerange`, `portal`, `rhythmic-sizing`, `target-within`, `usermedia`. Resolving one is `found: true` with an empty `support` array and `outcome: 'no_compat_data'`.
 
 ### 6. Search index
 
-One row per searchable entity: 20,517 BCD leaves plus the 23 `compat_features`-less features = **20,540 rows**. Of the 12 `moved`/`split` entries, only the 10 `moved` entries — which carry a single `redirect_target` — are indexed as alias rows pointing at it. The 2 `split` entries carry `redirect_targets` (plural, 2–3 targets) and have no single target to alias to; a split id resolves instead through the feature resolver's split-miss guidance (§1 step 5), independent of the search index.
+One row per searchable entity: 20,543 BCD leaves plus the 21 `compat_features`-less features = **20,564 rows**. Of the 12 `moved`/`split` entries, only the 10 `moved` entries — which carry a single `redirect_target` — are indexed as alias rows pointing at it. The 2 `split` entries carry `redirect_targets` (plural, 2–3 targets) and have no single target to alias to; a split id resolves instead through the feature resolver's split-miss guidance (§1 step 5), independent of the search index.
 
 | Row field | Source | Coverage |
 |:----------|:-------|:---------|
-| `bcd_key` | leaf path | 20,517 |
-| `baseline_id` | `by_compat_key` ownership, else the first `web-features:` tag | 15,577 leaves reach an id (15,292 by ownership, plus 285 more by tag only — 7 `by_compat_key` leaves carry no tag at all, so tag coverage alone (15,570) undercounts) |
-| `name` | web-features `name`, joined onto every leaf its feature owns | 1,191 distinct names, 0 duplicates |
-| `description` | web-features `description`, else BCD `description` with tags stripped and its HTML entities decoded (`&lt; &gt; &quot; &apos; &#39; &nbsp; &amp;`) | 1,191 / 5,071 |
-| `caniuse_title` | `caniuse-lite` `feature(id).title` via the feature's `caniuse[]` array | 333 features → 7,769 leaves |
-| `path_tokens` | leaf path split on `.` and camelCase boundaries | 20,517 |
+| `bcd_key` | leaf path | 20,543 |
+| `baseline_id` | `by_compat_key` ownership, else the first `web-features:` tag | 15,770 leaves reach an id (15,482 by ownership, plus 288 more by tag only — 204 `by_compat_key` leaves carry no tag at all, so tag coverage alone (15,566) undercounts) |
+| `name` | web-features `name`, joined onto every leaf its feature owns | 1,198 distinct names, 0 duplicates |
+| `description` | web-features `description`, else BCD `description` with tags stripped and its HTML entities decoded (`&lt; &gt; &quot; &apos; &#39; &nbsp; &amp;`) | 1,198 / 5,070 |
+| `caniuse_title` | `caniuse-lite` `feature(id).title` via the feature's `caniuse[]` array | 339 features → 7,850 leaves |
+| `path_tokens` | leaf path split on `.` and camelCase boundaries | 20,543 |
+| `groups` | the feature's `group` ids plus every ancestor group, via `baseline_id` | 15,791 rows reach a feature; the 4,773 with no `baseline_id` carry none |
+| `snapshots` | the feature's `snapshot` ids, via `baseline_id` | 45 features |
 
 caniuse contributes titles only — 583 of them. There are no keywords or categories in `caniuse-lite`.
 
-Normalization for both index and query: lowercase, strip HTML tags, strip punctuation except `-`, split on whitespace, `.`, and camelCase boundaries.
+Normalization for both index and query: lowercase, strip punctuation except `-`, split on whitespace, `.`, and camelCase boundaries. `<` and `>` are punctuation like any other, so the query `<dialog>` tokenizes to `dialog` and matches the web-features name `<dialog>`: 106 names are a bare tag and 123 contain a `<...>` fragment. Markup is stripped only from BCD `description` text, which is real HTML, by `stripTags` at index build.
+
+For the `path_suffix` tier the query is also split into path segments: lowercase, drop a trailing `()`, split on `.`, `:`, and whitespace, and drop a `prototype` segment that sits between two others. `Array.prototype.at()` reads as `array.at`, `display: grid` as `display.grid`. A camelCase word is never split here, so `isPrototypeOf` stays one segment.
 
 Ranking is tiered and deterministic. No composite score.
 
 | Tier | Match |
 |:-----|:------|
 | 1 | query equals a BCD key or a web-features id, case-sensitive |
-| 2 | query equals a `name` or `caniuse_title`, case-insensitive |
+| 2 | query equals a `name` or `caniuse_title`, case-insensitive; or (`path_suffix`) a BCD key's trailing segments equal the query's two or more segments, in order, case-insensitive |
 | 3 | every query token appears in `name` |
 | 4 | every query token appears in the last path segment |
 | 5 | every query token appears in `description` or `caniuse_title` |
@@ -383,7 +387,7 @@ Within a tier, order by: shorter BCD key path first (a feature's own entry befor
 
 ### 7. Multi-key resolution and limiting browser
 
-A web-features id can own more than one BCD key, and this is the common case, not the edge case: **880 of the 1,203 features (73%) own more than one key** (`grid` alone owns 62; `compat_features` totals 15,292 refs across 1,168 features). Fields that only exist at BCD-leaf granularity — `support`, `status` (`deprecated`/`experimental`/`standard_track`), `limiting_browser`, `mdn_url`, `spec_urls` — have no single correct value across multiple keys and are never averaged or rolled up across them: keys under one feature can disagree (the `grid` Baseline divergence in §5 is exactly this, and it is a per-key fact, not a rounding error).
+A web-features id can own more than one BCD key, and this is the common case, not the edge case: **882 of the 1,198 features (74%) own more than one key** (`grid` alone owns 62; `compat_features` totals 15,482 refs across 1,177 features). Fields that only exist at BCD-leaf granularity — `support`, `status` (`deprecated`/`experimental`/`standard_track`), `limiting_browser`, `mdn_url`, `spec_urls` — have no single correct value across multiple keys and are never averaged or rolled up across them: keys under one feature can disagree (the `grid` Baseline divergence in §5 is exactly this, and it is a per-key fact, not a rounding error).
 
 When `resolved_as.bcd_key` is `null` (the id resolved to more than one key), a tool omits those leaf-only fields entirely rather than guessing which key they should represent, and instead returns `compat_keys` — the feature's full `compat_features` list — so the agent can re-call with one specific key for the per-browser answer. `browsercompat_compare_support` cannot compute a `clears`/`fails` verdict without a single key's support data either, so it reports this case as verdict `ambiguous`. `baseline` is exempt from this rule: it is legitimately reported at the feature level (the web-features rollup) when resolved via a web-features id — that is a real, intended value, not a stand-in for a missing per-key answer.
 
@@ -412,9 +416,9 @@ The vocabulary tool, and the standing routing target for every recovery string, 
 | `bcd_namespaces` | 12 | `count` = leaf count; `detail` = one line plus an example key |
 | `bcd_browsers` | 17 | `reported` (type is desktop or mobile), `detail` = type, upstream, release count, newest released version |
 | `browserslist_agents` | 19 | `bcd_browser` (or null), `usage_percent` = agent total `usage_global` |
-| `baseline_states` | 4 | `maps_from` = the raw `status.baseline` value (`null` for `not_mapped`, which has none); `count` = BCD leaves in that state — 8,739 `widely` / 1,244 `newly` / 5,309 `limited` / 5,225 `not_mapped`, summing to all 20,517 leaves. This is per-key, not the feature-level split (646/117/428 features) in Data Sources — see D28. |
-| `groups` | 103 | web-features group id and name |
-| `snapshots` | 11 | `spec_url` |
+| `baseline_states` | 4 | `maps_from` = the raw `status.baseline` value (`null` for `not_mapped`, which has none); `count` = BCD leaves in that state — 8,746 `widely` / 1,256 `newly` / 5,480 `limited` / 5,061 `not_mapped`, summing to all 20,543 leaves. This is per-key, not the feature-level split (646/123/429 features) in Data Sources — see D28. |
+| `groups` | 104 | web-features group id and name; `detail` names the parent and says to pass the id as `group` to `browsercompat_search_features` (nested groups included) |
+| `snapshots` | 11 | `spec_url`; `detail` says to pass the id as `snapshot` to `browsercompat_search_features` |
 
 **Errors:** none declared. `topic` is a Zod enum, so an invalid value is rejected as `InvalidParams` before the handler runs.
 
@@ -435,7 +439,7 @@ The 80% tool.
 | Param | Type | Maps to | Notes |
 |:------|:-----|:--------|:------|
 | `feature` | `string` (1–200), required | resolver | BCD key or web-features id. The length bound is a schema constraint, so an empty or over-long string is rejected by name (Core Mechanics §1). |
-| `resolve` | `boolean`, default `false` | resolver step 6 | Enables the single-best-search-hit fallback. Off by default so a typo returns a miss the agent can correct rather than a confidently wrong feature. |
+| `resolve` | `boolean`, default `false` | resolver step 6 | Enables the search fallback, which accepts the top search tier only when it names one feature or key. Off by default so a typo returns a miss the agent can correct rather than a confidently wrong feature. |
 | `include_runtimes` | `boolean`, default `false` | reported browser set | Adds `bun`, `deno`, `nodejs`, `oculus`. Leave off for browser ship decisions. |
 
 **Output**
@@ -458,7 +462,7 @@ The 80% tool.
 
 Each `support` row: `{ browser_id, browser_name, verdict, version_added?, version_added_is_upper_bound?, version_removed?, version_last?, partial?, prefix?, alternative_name?, flags?, notes?, impl_url? }`. Absent upstream fields stay absent — never coerced to `false`, `0`, or `""`.
 
-**`format()`** leads with the decision and renders every output field. It reports each field by name rather than in loose prose, since a support row can carry any combination of `partial` / `prefix` / `alternative_name` / `flags` that a fixed-column table can't accommodate — worked example, computed against BCD 8.1.1:
+**`format()`** leads with the decision and renders every output field. It reports each field by name rather than in loose prose, since a support row can carry any combination of `partial` / `prefix` / `alternative_name` / `flags` that a fixed-column table can't accommodate — worked example, computed against BCD 8.1.2:
 
 ```
 # :has()
@@ -525,13 +529,13 @@ The cheap ship/no-ship entry point across several features at once. `browsercomp
 
 `all_widely_available` is a boolean over the whole call: true only when every result has `outcome` in `{ found, no_compat_data }` **and** `baseline.state === 'widely'`. A single `miss` result forces it false — an unresolved input is never treated as safe. `deprecated`, `experimental`, and `discouraged` do not affect it: the field answers the Baseline question only, and those flags are reported per result so the agent weighs them separately (D30).
 
-Each result: `{ input, found, outcome, resolved_as, name?, baseline?, limiting_browser?, deprecated?, experimental?, discouraged?, usage_percent_excluded?, usage_source?, compat_keys?, guidance? }`. `outcome` is the same `found | no_compat_data | miss` enum as `browsercompat_get_feature`. `limiting_browser`, `deprecated`, and `experimental` are absent under the same conditions as that tool (Core Mechanics §7 — undefined until the core set is fully resolved, and never available for a multi-key feature); `compat_keys` appears in their place when `resolved_as.bcd_key` is `null`. `baseline` and `discouraged` are feature-level fields and stay populated regardless — including for the 23 features with no `compat_features` at all, which resolve `found: true`, `outcome: 'no_compat_data'`, `baseline` present, `deprecated`/`experimental`/`limiting_browser` absent.
+Each result: `{ input, found, outcome, resolved_as, name?, baseline?, limiting_browser?, deprecated?, experimental?, discouraged?, usage_percent_excluded?, usage_source?, compat_keys?, guidance? }`. `outcome` is the same `found | no_compat_data | miss` enum as `browsercompat_get_feature`. `limiting_browser`, `deprecated`, and `experimental` are absent under the same conditions as that tool (Core Mechanics §7 — undefined until the core set is fully resolved, and never available for a multi-key feature); `compat_keys` appears in their place when `resolved_as.bcd_key` is `null`. `baseline` and `discouraged` are feature-level fields and stay populated regardless — including for the 21 features with no `compat_features` at all, which resolve `found: true`, `outcome: 'no_compat_data'`, `baseline` present, `deprecated`/`experimental`/`limiting_browser` absent.
 
 Partial success is native: a per-item `found` flag, no separate `failed[]`, because a miss is a result and not a failure.
 
-`discouraged` is `{ reason, according_to[] }` straight from web-features (55 features).
+`discouraged` is `{ reason, according_to[] }` straight from web-features (56 features).
 
-**`usage_percent_excluded`** is defined precisely and computed, never estimated: the feature must reach a `caniuse-lite` id through its web-features `caniuse[]` array (333 features, 7,769 BCD leaves — 37.9% of leaves, 27.7% of features). The value is the sum of `agents[a].usage_global[v]` over every agent/version pair whose caniuse stat letter is not `y`. Partial support (`a`) counts as excluded. `usage_source` states that the figure is a share of the 96.688% of traffic caniuse tracks, not of all traffic. When the feature reaches no caniuse id, the field is absent — never zero.
+**`usage_percent_excluded`** is defined precisely and computed, never estimated: the feature must reach a `caniuse-lite` id through its web-features `caniuse[]` array (339 features, 7,850 BCD leaves — 38.2% of leaves, 28.3% of features). The value is the sum of `agents[a].usage_global[v]` over every agent/version pair whose caniuse stat letter is not `y`. Partial support (`a`) counts as excluded. `usage_source` states that the figure is a share of the 96.688% of traffic caniuse tracks, not of all traffic. When the feature reaches no caniuse id, the field is absent — never zero.
 
 **Errors**
 
@@ -562,12 +566,19 @@ The discovery entry point.
 
 | Param | Type | Notes |
 |:------|:-----|:------|
-| `query` | `string` (1–100), required | plain-language name or keyword |
+| `query` | `string` (1–100), required | plain-language name, keyword, or code notation (`Array.prototype.at`, `display: grid`, `<dialog>`) |
 | `namespace` | enum, optional | one of the 12 BCD namespaces; restricts results to that subtree |
 | `baseline` | enum, optional | `widely` \| `newly` \| `limited` \| `not_mapped` |
-| `limit` | `number` (1–50), default 10 | display cap |
+| `group` | `string` (1–100), optional | a web-features group id; matches features in that group or any group nested under it. Checked against the bundled vocabulary, not a Zod enum, since the set moves with each `web-features` bump |
+| `snapshot` | `string` (1–100), optional | an ECMAScript snapshot id, checked the same way |
+| `limit` | `number` (1–50), default 10 | page size |
+| `offset` | `number` (integer ≥ 0), default 0 | matches to skip; slices the same ranked, filtered list `limit` caps |
 
-**Output** — `{ results[] }` where each result is `{ bcd_key?, baseline_id?, name?, description?, baseline_state, matched_on, support_summary, mdn_url? }`.
+All four filters combine as an intersection and apply before ranking. A row matches `group` / `snapshot` through its `baseline_id`'s feature, so the 4,773 rows without one never match either. On current data `{ query: "has", group: "selectors", baseline: "limited" }` returns 3 rows and `{ query: "array", snapshot: "ecmascript-2023" }` returns 11 rows from 2 features.
+
+The ranking is a total order over a static snapshot, so a plain offset is stable across pages: paging `display` in `css` with `limit: 50` at offsets 0, 50, … 300 returns all 341 matches exactly once, in rank order.
+
+**Output** — `{ results[] }` where each result is `{ bcd_key?, baseline_id?, name?, description?, baseline_state, matched_on, support_summary, mdn_url? }`. `matched_on` ∈ `bcd_key` \| `baseline_id` \| `name` \| `caniuse_title` \| `path_suffix` \| `path_segment` \| `description` \| `path_tokens`.
 
 `support_summary` is a single line over all 7 Baseline core browsers, including the mobile twins, e.g. `Chrome 105, Chrome Android 105, Edge 105, Firefox 121, Firefox for Android 121, Safari 15.4, Safari on iOS 15.4`, with `—` for unsupported and `?` for unknown.
 
@@ -576,15 +587,19 @@ The discovery entry point.
 | reason | code | when | recovery |
 |:-------|:-----|:-----|:---------|
 | `invalid_query` | `ValidationError` | `query` is whitespace-only after normalization, or normalizes to zero tokens | `Pass at least one word, e.g. "container query" or "fromAsync". Call browsercompat_list_reference with topic bcd_namespaces to browse by area instead.` |
+| `unknown_group` | `ValidationError` | `group` names no web-features group in the bundled data (a feature id such as `popover` included) | `Call browsercompat_list_reference with topic groups for the valid group ids, then retry with one of them or without group.` |
+| `unknown_snapshot` | `ValidationError` | `snapshot` names no ECMAScript snapshot in the bundled data (`es2023` included; the id is `ecmascript-2023`) | `Call browsercompat_list_reference with topic snapshots for the valid snapshot ids, then retry with one of them or without snapshot.` |
 
 Zero hits are a successful empty result, not an error.
 
-**Zero-hit notice fragments** (condition → fragment, each routing to a concrete next call):
+**Zero-hit notice fragments** (condition → fragment, each routing to a concrete next call). When several filters are set, only the first in the order of this table is named; a snapshot goes first because all 11 together cover 45 features:
 
 | Condition | Fragment |
 |:----------|:---------|
+| `snapshot` filter was set | `No match in the <snapshot> snapshot. Re-run without snapshot, or call browsercompat_list_reference with topic snapshots to pick a different edition.` |
+| `group` filter was set | `No match in the <group> group or the groups nested under it. Re-run without group, or call browsercompat_list_reference with topic groups to pick a different group.` |
 | `namespace` filter was set | `No match in the <ns> namespace. Re-run without namespace, or call browsercompat_list_reference with topic bcd_namespaces to pick a different area.` |
-| `baseline` filter was set | `No match at Baseline <state>. Re-run without the baseline filter — <share>% of BCD keys are not_mapped and are excluded by any other baseline value.` — `<share>` is computed at call time from the live not_mapped count, not a hardcoded figure (25.5% today) |
+| `baseline` filter was set | `No match at Baseline <state>. Re-run without the baseline filter — <share>% of BCD keys are not_mapped and are excluded by any other baseline value.` — `<share>` is computed at call time from the live not_mapped count, not a hardcoded figure (24.6% today) |
 | no filters set | `No feature matched "<query>". Try the CSS property, JS method, or HTML element name on its own, or call browsercompat_list_reference with topic bcd_namespaces to browse by area.` |
 
 **Enrichment**
@@ -592,12 +607,14 @@ Zero hits are a successful empty result, not an error.
 | Key | Kind | Populated when |
 |:----|:-----|:---------------|
 | `data_version` | `echo` | always |
-| `totalCount` | `total` | always — matches before the display cap |
-| `truncated` | via `ctx.enrich.truncated({ shown, cap })` | matches exceed `limit` |
-| `appliedFilters` | plain, with an `enrichmentTrailer.render` | any of `namespace` / `baseline` was set |
+| `totalCount` | `total` | always — every match, before `offset` and `limit` apply |
+| `truncated` | via `ctx.enrich.truncated({ shown, cap })` | matches remain past this page; `shown` and `cap` describe this page |
+| `nextOffset` | plain | matches remain past this page — the `offset` for the next call |
+| `appliedFilters` | plain, with an `enrichmentTrailer.render` | any of `namespace` / `baseline` / `group` / `snapshot` was set; the trailer marks `group` as including nested groups |
 | `noMatchNotice` | `notice` | zero hits |
+| `offsetNotice` | plain, `enrichmentTrailer.label: 'Past the end'` | the search matched, but `offset` is at or past `totalCount`; names both and points back to a valid offset |
 
-`format()` renders only the returned `results`; the match total and display cap travel via `enrichment` (`totalCount`, `truncated`, `shown`, `cap`) per D19, not as a "…and N more" line in `format()`.
+`format()` renders only the returned `results`; the match total, page size, and next offset travel via `enrichment` (`totalCount`, `truncated`, `shown`, `cap`, `nextOffset`) per D19, not as a "…and N more" line in `format()`.
 
 **Annotations:** `readOnlyHint: true`, `idempotentHint: true`, `openWorldHint: false`.
 
@@ -665,7 +682,7 @@ The browserslist error message is forwarded verbatim in the thrown message — i
 
 **`format()`** leads with the verdict, then the failures, then the unchecked set — the unchecked block is never omitted, since its absence is what would let a clean pass be misread:
 
-Worked example, computed against BCD 8.1.1 and `browserslist('defaults')` (32 tokens, 27 of them resolved):
+Worked example, computed against BCD 8.1.2 and `browserslist('defaults')` (32 tokens, 27 of them resolved):
 
 ```
 # 1 of 3 features clears `defaults`
@@ -696,10 +713,10 @@ Targets evaluated cover 83.88% of tracked traffic · 5 target versions not evalu
 
 | Service | Wraps | Used By |
 |:--------|:------|:--------|
-| `bcd-service` | `@mdn/browser-compat-data` — flat leaf index (20,517 keys), per-browser release-index maps, reported-browser set, `resolveTargetVersion`, `supportAt` | all five tools |
+| `bcd-service` | `@mdn/browser-compat-data` — flat leaf index (20,543 keys), per-browser release-index maps, reported-browser set, `resolveTargetVersion`, `supportAt` | all five tools |
 | `baseline-service` | `web-features` — feature map, `by_compat_key` index, redirect map, groups, snapshots | `get_feature`, `check_baseline`, `search_features`, `compare_support`, `list_reference` |
 | `targets-service` | `browserslist` + `caniuse-lite` — query resolution, the agent↔BCD map, `coverage()`, per-agent `usage_global`, the excluded-usage computation | `compare_support`, `check_baseline`, `list_reference` |
-| `search-service` | the 20,540-row in-memory index built from the three above | `search_features`, and resolver step 6 |
+| `search-service` | the 20,564-row in-memory index built from the three above | `search_features`, and resolver step 6 |
 | `data-version-service` | the four package versions (see *Reading dependency versions at runtime*) | all five tools |
 
 The shared feature resolver (Core Mechanics §1) lives beside `baseline-service` in its own module, `src/services/baseline/feature-resolver.ts`, rather than as a method on the `BaselineService` class: it imports the BCD, baseline, and search services, and nothing imports it back, which keeps `baseline-service` and `search-service` from importing each other — Biome's `noImportCycles` (error-level) forbids that cycle, which resolving through search from inside `baseline-service` would otherwise create.
@@ -753,7 +770,7 @@ Draft `instructions` for `createApp()`:
 1. **Data deps and version reading** — `@mdn/browser-compat-data`, `web-features`, `browserslist`, `caniuse-lite` as runtime dependencies; `data-version-service` with the Node-safe resolution for each.
 2. **`browsercompat_list_reference`** — no resolver dependency; grounds field-testing for everything after it.
 3. **`bcd-service`** — leaf index, release-index maps, reported browser set, `resolveTargetVersion`, `supportAt`. Unit-test the version comparison against the recorded edge cases: `≤12.1`, `version_added: 'preview'`, array statements, `api.DOMMatrix [firefox] ["33","49","1.5"]` ordering, `samsung 20` ↔ `20.0`, `safari 16.0` ↔ `16`, `ios_saf 18.5-18.7`, `op_mini all`, `safari TP`, a browser absent from `support`.
-4. **`baseline-service`** and the resolver — including the four case-colliding BCD keys, the 12 redirect entries, the 285 tagged-but-unmapped leaves, and the 23 features with no `compat_features`.
+4. **`baseline-service`** and the resolver — including the four case-colliding BCD keys, the 12 redirect entries, the 288 tagged-but-unmapped leaves, and the 21 features with no `compat_features`.
 5. **`browsercompat_get_feature`**.
 6. **`browsercompat_check_baseline`** — adds the excluded-usage computation and the attribution string.
 7. **`search-service`** and **`browsercompat_search_features`**.
@@ -777,23 +794,23 @@ Each step is independently testable. Steps 3 and 4 are the load-bearing ones; ev
 
 **D5 — BCD key matching is case-sensitive only.** Four pairs collide case-insensitively (`api.Crypto`/`api.crypto`, `api.Origin`/`api.origin`, `api.Performance`/`api.performance`, `api.Scheduler`/`api.scheduler`), so a case-folding fallback would pick arbitrarily between two real features.
 
-**D6 — `resolve: true` is opt-in and off by default.** A search fallback that fires by default turns a typo into a confident answer about the wrong feature. Off, a typo returns a miss the agent can correct in one turn.
+**D6 — `resolve: true` is opt-in and off by default.** A search fallback that fires by default turns a typo into a confident answer about the wrong feature. Off, a typo returns a miss the agent can correct in one turn. When on, it accepts only a top tier that names one entity (D40).
 
 **D7 — A resolver miss is `{ found: false, guidance }` in `output`, not a throw.** Resolution is the tool's whole job, so a no-match is an expected outcome the agent reasons about. Throws are reserved for malformed input and rejected browserslist queries. This matches the framework split: a search's empty result rides `enrichment`, a resolver's miss is the primary result.
 
-**D8 — The reported browser set is 13, derived from `browsers[id].type`.** BCD 8.1.1 has 6 `desktop` and 7 `mobile` browsers. (The idea doc says "12" but enumerates 13 ids; the data agrees with the list, not the count.) Deriving from `type` rather than hardcoding means a browser BCD adds later lands in the right bucket with no code change.
+**D8 — The reported browser set is 13, derived from `browsers[id].type`.** BCD 8.1.2 has 6 `desktop` and 7 `mobile` browsers. (The idea doc says "12" but enumerates 13 ids; the data agrees with the list, not the count.) Deriving from `type` rather than hardcoding means a browser BCD adds later lands in the right bucket with no code change.
 
 **D9 — Order versions by `releases[v].index`, never by parsing version strings or trusting key order.** `index` is a unique 0..n−1 release ordinal, verified for all 17 browsers. `Object.keys(releases)` is not sorted — `safari` yields `… 17, 18, 26, 27, 1.1, 1.2, … 3.1, 5.1, 9.1`.
 
-**D10 — `≤X` before the target, and a browser absent from `support`, both resolve to `unknown`, never to unsupported.** BCD uses `≤X` precisely to say it does not know how far back support goes, and six browsers carry entries on only 18,442 of 20,517 leaves. Reading either as "no" would manufacture a false negative.
+**D10 — `≤X` before the target, and a browser absent from `support`, both resolve to `unknown`, never to unsupported.** BCD uses `≤X` precisely to say it does not know how far back support goes, and six browsers carry entries on only 18,468 of 20,543 leaves. Reading either as "no" would manufacture a false negative.
 
-**D11 — `version_added: 'preview'` is not shipped.** 885 statements use it, and only Chrome, Firefox, and Safari have a preview channel at all. It gets its own `preview_only` verdict so the distinction from `unsupported` is visible.
+**D11 — `version_added: 'preview'` is not shipped.** 910 statements use it, and only Chrome, Firefox, and Safari have a preview channel at all. It gets its own `preview_only` verdict so the distinction from `unsupported` is visible.
 
 **D12 — `unknown` neither passes nor fails a target; it moves to `unchecked_targets` and makes the feature `inconclusive`.** This is the rule that keeps a clean pass from being reported for a browser that was never evaluated. `browserslist('defaults')` yields 5 unmappable tokens across 4 agents, so the path is exercised on the most common query in the ecosystem.
 
-**D13 — Baseline comes from `status.by_compat_key[bcdKey]`, and the BCD tag is only a hint.** `by_compat_key` covers 15,292 keys with clean 1:1 ownership; BCD tags cover 15,570 leaves with 777 multi-tag leaves and 285 leaves whose tag has no matching `by_compat_key` entry. Verified divergence between rollup and key: `grid` rolls up to `high`/2020-04-17 while its 62 keys carry several distinct states.
+**D13 — Baseline comes from `status.by_compat_key[bcdKey]`, and the BCD tag is only a hint.** `by_compat_key` covers 15,482 keys with clean 1:1 ownership; BCD tags cover 15,566 leaves with 777 multi-tag leaves and 288 leaves whose tag has no matching `by_compat_key` entry. Verified divergence between rollup and key: `grid` rolls up to `high`/2020-04-17 while its 62 keys carry several distinct states.
 
-**D14 — `not_mapped` is a fourth explicit Baseline state covering 5,225 leaves (25.5%).** The raw values are `"high"`, `"low"`, and `false`; the reported words are `widely`, `newly`, `limited`, `not_mapped`. An absent field would read as "no data loaded"; an explicit state reads as "this key is outside the web-features mapping," which is the actual fact.
+**D14 — `not_mapped` is a fourth explicit Baseline state covering 5,061 leaves (24.6%).** The raw values are `"high"`, `"low"`, and `false`; the reported words are `widely`, `newly`, `limited`, `not_mapped`. An absent field would read as "no data loaded"; an explicit state reads as "this key is outside the web-features mapping," which is the actual fact.
 
 **D15 — Search ranks in six named tiers with a `matched_on` echo, not a composite score.** A weighted score over name, description, and path hits would look authoritative while being arbitrary. Tiers are inspectable and the agent can see why a row ranked where it did.
 
@@ -817,11 +834,11 @@ Each step is independently testable. Steps 3 and 4 are the load-bearing ones; ev
 
 **D25 — No auth scopes, no server-specific env vars.** Read-only bundled public data, no tenant state, no upstream quota. A scope or a config knob here would be surface with nothing behind it.
 
-**D26 — A multi-key web-features id (`resolved_as.bcd_key === null`) omits leaf-only fields and returns `compat_keys` instead of aggregating across keys.** Verified 880 of 1,203 features (73%) own more than one BCD key, so this is the common case, not a corner case. `support`, `status`, `limiting_browser`, `mdn_url`, and `spec_urls` are per-leaf facts with no single correct value across keys that can disagree (D13's `grid` divergence). `browsercompat_compare_support` reports the same situation as verdict `ambiguous` rather than guessing which key's support data to check against the targets.
+**D26 — A multi-key web-features id (`resolved_as.bcd_key === null`) omits leaf-only fields and returns `compat_keys` instead of aggregating across keys.** Verified 882 of 1,198 features (74%) own more than one BCD key, so this is the common case, not a corner case. `support`, `status`, `limiting_browser`, `mdn_url`, and `spec_urls` are per-leaf facts with no single correct value across keys that can disagree (D13's `grid` divergence). `browsercompat_compare_support` reports the same situation as verdict `ambiguous` rather than guessing which key's support data to check against the targets.
 
 **D27 — `limiting_browser` is populated only once every core-set browser has a resolvable version.** When a browser hasn't shipped support at all (`unsupported`, `removed`, or `unknown`), "the browser requiring the newest version" has no answer — the per-browser `support` array already names the actual blocker, so `limiting_browser` is omitted rather than picking an arbitrary browser or a version that doesn't exist. `preview_only` is the same case in disguise: it qualifies as a limiting-eligible verdict but carries no `version_added` to compare, so a core set containing one also omits `limiting_browser`.
 
-**D28 — `browsercompat_list_reference`'s `baseline_states` counts are per-BCD-key, not per-feature.** Verified: the feature-level split (646 `high` / 117 `low` / 428 `false` / 12 no-status, out of 1,191 features) and the per-key split via `by_compat_key` (8,739 `high` / 1,244 `low` / 5,309 `false`, plus 5,225 keys in no `by_compat_key` entry at all, summing to all 20,517 leaves) are different populations. Since the server reports Baseline per BCD key everywhere else (Requirements, D13), the reference tool's counts follow that same unit rather than the feature-level numbers that happen to appear earlier in this doc's data verification.
+**D28 — `browsercompat_list_reference`'s `baseline_states` counts are per-BCD-key, not per-feature.** Verified: the feature-level split (646 `high` / 123 `low` / 429 `false` among 1,198 features, plus 12 redirect entries with no status) and the per-key split via `by_compat_key` (8,746 `high` / 1,256 `low` / 5,480 `false`, plus 5,061 keys in no `by_compat_key` entry at all, summing to all 20,543 leaves) are different populations. Since the server reports Baseline per BCD key everywhere else (Requirements, D13), the reference tool's counts follow that same unit rather than the feature-level numbers that happen to appear earlier in this doc's data verification.
 
 **D29 — Dropped `limiting_target` from `browsercompat_compare_support`'s `results` schema.** It named a single "limiting" target with no defined selection rule and no use in the worked example, and `failing_targets[]` already itemizes every failing target with its own verdict — a second field naming one of them adds an unspecified tie-break with no offsetting value.
 
@@ -845,15 +862,25 @@ Each step is independently testable. Steps 3 and 4 are the load-bearing ones; ev
 
 **D39 — The 1–200 character bound lives on the input schema; `invalid_feature_input` covers whitespace-only.** `get_feature` declared the empty and over-length cases in its error contract while its own schema already rejected them, leaving that half of the contract unreachable behind a generic schema rejection; the two array tools bounded their entries neither way. The length bound now sits on the schema for all three, where it is rejected by field name and advertised in `inputSchema`, and whitespace-only — the one case a length validator cannot express — is what the handler-level contract covers, identically across `get_feature`, `check_baseline`, and `compare_support`.
 
+**D40 — Resolver step 6 counts entities in the top tier, not rows.** A feature's name is joined onto every key it owns, so "one row in the tier" rejected an exact name on any multi-key feature (882 of 1,198), which is most of what `resolve: true` is for. Grouping by `baseline_id` (by `bcd_key` for an unmapped row) keeps the original guard, since two features sharing the top tier are still a miss, and a multi-key hit resolves exactly as its feature id would under step 3. Exact-label rows take precedence over `path_suffix` rows in the same tier: a feature's exact name is stronger evidence than a key that merely ends in the same words, and without the precedence the feature named `window.external` would be a miss because `api.Window.external` also ends that way.
+
+**D41 — The `path_suffix` match sits in tier 2 and needs at least two segments.** Dotted and property-value notation (`element.animate`, `display: grid`) is how developers name a key. Left to tier 6 `path_tokens` it ranked below every description hit (`element.animate` 242nd of 250). Two segments pick one key almost every time: 18,616 of the 18,899 two-segment suffixes of keys three or more segments deep name exactly one key. A single segment is shared across 13,265 keys. A suffix shared by several keys (`referrerpolicy.unsafe-url`, 13 keys across `referrer-policy` and `svg`) lists them all and leaves the choice to D40's grouping, where an exact name in the same tier outranks it. `prototype` is dropped only between two segments, so MDN's `Array.prototype.at` form matches while the bare word `prototype` and `isPrototypeOf` still search as before.
+
+**D42 — The `group` filter includes descendant groups, and `group` / `snapshot` are validated against the bundled vocabulary rather than a Zod enum.** Top-level groups hold few features directly (`css` 101 direct, 355 with its 29 descendant groups), so an exact-group filter would miss most of what a caller means. webstatus.dev's `group:` operator uses the same semantics. Both vocabularies move with each `web-features` bump, so a hardcoded enum would go stale. An unknown value fails with `unknown_group` / `unknown_snapshot` and routes to `browsercompat_list_reference`.
+
+**D43 — `<` and `>` are punctuation in the query and in indexed names; markup is stripped only from BCD descriptions.** Queries are plain text, and web-features names element features in tag form. Treating `<...>` as markup erased `<dialog>` to nothing (rejected as `invalid_query`) and hid the tag from the 123 names that contain one. BCD `description` is the one field that carries real HTML, and `stripTags` already cleans it at index build.
+
+**D44 — `search_features` pages with a plain `offset` and a `nextOffset` enrichment field, not a cursor.** The ranking is a total order over an immutable bundled snapshot, so the same offset always returns the same rows. A cursor would add state without making paging any more stable.
+
 ---
 
 ## Known Limitations
 
 - **Staleness is the operating risk.** Baseline dates move — `:has()` crossed to widely available on 2026-06-19 — and a pinned dependency returns a stale ship/no-ship verdict on precisely the newest features. Two mitigations: `data_version` on every response, and a dependency bump at least monthly tracking BCD releases.
-- **25.5% of BCD keys have no Baseline mapping.** 5,225 leaves report `not_mapped`. Filtering search by any Baseline value excludes all of them, which the zero-hit notice says explicitly.
+- **24.6% of BCD keys have no Baseline mapping.** 5,061 leaves report `not_mapped`. Filtering search by any Baseline value excludes all of them, which the zero-hit notice says explicitly.
 - **Usage figures are a share of tracked traffic, not of all traffic.** caniuse `usage_global` sums to 96.688% across all 19 agents. The attribution string states this on every response that carries a percentage.
 - **Seven browserslist agents have no compatibility data** — `op_mini`, `bb`, `and_uc`, `and_qq`, `baidu`, `kaios`, `ie_mob`, together 0.784% of tracked usage. They always land in `unchecked_targets`; the server reports the gap rather than guessing.
-- **23 web-features entries have no BCD keys** and return `no_compat_data` — Baseline state is available for them, per-browser support is not.
+- **21 web-features entries have no BCD keys** and return `no_compat_data` — Baseline state is available for them, per-browser support is not.
 - **`webextensions` leaves carry no `status`.** All 2,075 of them render "not recorded" for deprecated/experimental/standard-track rather than a fabricated `false`.
 - **caniuse and BCD version spaces diverge per browser.** Exact for Chrome, Edge, Firefox, and IE; 26 of 54 tokens for `ios_saf`; 10 of 27 for `samsung`. The normalization plus nearest-at-or-below rule closes the gap, and `safari TP` remains unresolvable by design.
 - **No live MDN prose.** The server returns `mdn_url` and `spec_url`; fetching the page is a browser or fetch server's job.
