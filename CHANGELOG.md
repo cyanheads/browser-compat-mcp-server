@@ -2,6 +2,10 @@
 
 All notable changes to this project. Each entry links to its full per-version file in [changelog/](changelog/).
 
+## [0.1.4](changelog/0.1.x/0.1.4.md) — 2026-09-22
+
+Search now matches dotted and property-value notation, filters by web-features group and ECMAScript snapshot, and pages by offset; resolve: true correctly handles a name spanning several BCD keys.
+
 ## [0.1.3](changelog/0.1.x/0.1.3.md) — 2026-09-20
 
 The public hosted instance at browser-compat.caseyjhand.com/mcp is now published in server.json remotes and documented in the README.

@@ -1,6 +1,6 @@
 # browser-compat-mcp-server - Directory Structure
 
-Generated on: 2026-09-20 03:50:28
+Generated on: 2026-09-22 18:56:53
 
 ```text
 browser-compat-mcp-server/
@@ -177,6 +177,7 @@ browser-compat-mcp-server/
 │   ├── services/
 │   │   ├── baseline/
 │   │   │   ├── baseline-service.test.ts
+│   │   │   ├── feature-resolver.search-step.test.ts
 │   │   │   └── feature-resolver.test.ts
 │   │   ├── bcd/
 │   │   │   └── bcd-service.test.ts
