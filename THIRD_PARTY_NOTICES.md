@@ -6,8 +6,8 @@ attribution those datasets require.
 
 | Dataset | Version range | License | Source |
 |:--------|:--------------|:--------|:-------|
-| `@mdn/browser-compat-data` | ^8.1.1 | CC0-1.0 | https://github.com/mdn/browser-compat-data |
-| `web-features` | ^3.38.0 | Apache-2.0 | https://github.com/web-platform-dx/web-features |
+| `@mdn/browser-compat-data` | ^8.1.2 | CC0-1.0 | https://github.com/mdn/browser-compat-data |
+| `web-features` | ^3.39.0 | Apache-2.0 | https://github.com/web-platform-dx/web-features |
 | `caniuse-lite` | ^1.0.30001810 | CC-BY-4.0 | https://github.com/browserslist/caniuse-lite |
 | `browserslist` | ^4.29.0 | MIT | https://github.com/browserslist/browserslist |
 

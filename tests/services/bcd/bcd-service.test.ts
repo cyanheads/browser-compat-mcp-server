@@ -11,9 +11,9 @@ import { describe, expect, it } from 'vitest';
 import { BcdService, getBcdService } from '@/services/bcd/bcd-service.js';
 
 describe('BcdService — real bundled data', () => {
-  it('indexes 20,517 leaves across the 12 documented namespaces', async () => {
+  it('indexes 20,543 leaves across the 12 documented namespaces', async () => {
     const bcd = await getBcdService();
-    expect(bcd.leafCount).toBe(20_517);
+    expect(bcd.leafCount).toBe(20_543);
     expect([...bcd.namespaces]).toEqual([
       'api',
       'css',
@@ -28,8 +28,8 @@ describe('BcdService — real bundled data', () => {
       'webdriver',
       'webextensions',
     ]);
-    expect(bcd.namespaceLeafCount('api')).toBe(10_251);
-    expect(bcd.namespaceLeafCount('css')).toBe(4_065);
+    expect(bcd.namespaceLeafCount('api')).toBe(10_265);
+    expect(bcd.namespaceLeafCount('css')).toBe(4_071);
     expect(bcd.namespaceLeafCount('webextensions')).toBe(2_075);
   });
 

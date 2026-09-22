@@ -26,7 +26,7 @@ describe('BaselineService — identity and lookups', () => {
 
   it('redirectTargets() reads a single moved target and a multi-target split in order', async () => {
     const baseline = await getBaselineService();
-    expect(baseline.redirectTargets('display-grid-lanes')).toEqual(['masonry']);
+    expect(baseline.redirectTargets('display-grid-lanes')).toEqual(['grid-lanes']);
     expect(baseline.redirectTargets('text-wrap-style')).toEqual([
       'text-wrap',
       'text-wrap-balance',
@@ -99,9 +99,9 @@ describe('BaselineService#compatKeys / caniuseIds / discouraged', () => {
     expect(baseline.compatKeys('has')).toEqual(['css.selectors.has']);
   });
 
-  it('compatKeys returns an empty array for the 23 features that own no BCD keys', async () => {
+  it('compatKeys returns an empty array for the 21 features that own no BCD keys', async () => {
     const baseline = await getBaselineService();
-    expect(baseline.compatKeys('masonry')).toEqual([]);
+    expect(baseline.compatKeys('intersection-observer-v2')).toEqual([]);
   });
 
   it('caniuseIds returns the feature’s caniuse[] array', async () => {
@@ -139,9 +139,9 @@ describe('BaselineService#compatKeys / caniuseIds / discouraged', () => {
 });
 
 describe('BaselineService — groups, snapshots, core browsers', () => {
-  it('exposes 103 groups and 11 ECMAScript snapshots', async () => {
+  it('exposes 104 groups and 11 ECMAScript snapshots', async () => {
     const baseline = await getBaselineService();
-    expect(Object.keys(baseline.groups)).toHaveLength(103);
+    expect(Object.keys(baseline.groups)).toHaveLength(104);
     expect(Object.keys(baseline.snapshots)).toHaveLength(11);
   });
 

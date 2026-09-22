@@ -15,9 +15,9 @@ describe('getDataVersion', () => {
   it('resolves every bundled dataset version, matching the installed packages', async () => {
     const version = await getDataVersion();
     expect(version).toEqual({
-      bcd: '8.1.1',
-      bcd_generated: '2026-09-10T16:02:02.250Z',
-      web_features: '3.38.0',
+      bcd: '8.1.2',
+      bcd_generated: '2026-09-17T12:01:51.601Z',
+      web_features: '3.39.0',
       caniuse_lite: '1.0.30001810',
       browserslist: '4.29.0',
     });
@@ -38,15 +38,15 @@ describe('getDataVersion', () => {
 describe('renderDataVersion', () => {
   it('renders every field on one line, dot-separated', () => {
     const rendered = renderDataVersion({
-      bcd: '8.1.1',
-      bcd_generated: '2026-09-10T16:02:02.250Z',
-      web_features: '3.38.0',
+      bcd: '8.1.2',
+      bcd_generated: '2026-09-17T12:01:51.601Z',
+      web_features: '3.39.0',
       caniuse_lite: '1.0.30001810',
       browserslist: '4.29.0',
     });
     expect(rendered).toBe(
-      '**Data:** browser-compat-data 8.1.1 (generated 2026-09-10T16:02:02.250Z) · ' +
-        'web-features 3.38.0 · caniuse-lite 1.0.30001810 · browserslist 4.29.0',
+      '**Data:** browser-compat-data 8.1.2 (generated 2026-09-17T12:01:51.601Z) · ' +
+        'web-features 3.39.0 · caniuse-lite 1.0.30001810 · browserslist 4.29.0',
     );
   });
 });

@@ -12,7 +12,7 @@
     "ignorePatterns": []
   },
   "outdated": {
-    "allowlist": []
+    "allowlist": ["@socketsecurity/bun-security-scanner", "ignore"]
   },
   "lint": {},
   "packaging": {
