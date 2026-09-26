@@ -11,9 +11,6 @@
     ],
     "ignorePatterns": []
   },
-  "outdated": {
-    "allowlist": ["@socketsecurity/bun-security-scanner", "ignore"]
-  },
   "lint": {},
   "packaging": {
     "pluginManifests": true
