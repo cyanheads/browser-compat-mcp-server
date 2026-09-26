@@ -13,6 +13,7 @@
  */
 
 import { readdirSync } from 'node:fs';
+import { sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { browsercompatCheckBaseline } from '@/mcp-server/tools/definitions/browsercompat-check-baseline.tool.js';
@@ -69,10 +70,14 @@ describe('tools/list surface', () => {
 });
 
 describe('resources and prompts — none (D17/D18)', () => {
-  it('the scaffolded resources/definitions and prompts/definitions directories are empty', () => {
+  it('contains no resource or prompt definition files', () => {
     const srcRoot = fileURLToPath(new URL('../../src/mcp-server', import.meta.url));
-    expect(readdirSync(`${srcRoot}/resources/definitions`)).toEqual([]);
-    expect(readdirSync(`${srcRoot}/prompts/definitions`)).toEqual([]);
+    const definitions = readdirSync(srcRoot, { recursive: true, encoding: 'utf8' }).filter(
+      (entry) =>
+        entry.startsWith(`resources${sep}definitions${sep}`) ||
+        entry.startsWith(`prompts${sep}definitions${sep}`),
+    );
+    expect(definitions).toEqual([]);
   });
 
   it('the tools/definitions directory contains only the five known tool files plus the shared shapes module', () => {
