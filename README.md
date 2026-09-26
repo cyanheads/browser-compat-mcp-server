@@ -7,7 +7,7 @@
 
 <div align="center">
 
-[![npm](https://img.shields.io/npm/v/@cyanheads/browser-compat-mcp-server?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/@cyanheads/browser-compat-mcp-server) [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg?style=flat-square)](./LICENSE) [![MCP SDK](https://img.shields.io/badge/MCP%20SDK-^2.0.0-green.svg?style=flat-square)](https://modelcontextprotocol.io/) [![Bun](https://img.shields.io/badge/Bun-v1.4.0%2B-blueviolet.svg?style=flat-square)](https://bun.sh/)
+[![npm](https://img.shields.io/npm/v/@cyanheads/browser-compat-mcp-server?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/@cyanheads/browser-compat-mcp-server) [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg?style=flat-square)](./LICENSE) [![MCP SDK](https://img.shields.io/badge/MCP%20SDK-^2.1.0-green.svg?style=flat-square)](https://modelcontextprotocol.io/) [![Bun](https://img.shields.io/badge/Bun-v1.4.2%2B-blueviolet.svg?style=flat-square)](https://bun.sh/)
 
 </div>
 
@@ -47,53 +47,40 @@ Web platform compatibility for frontend work: per-browser support from MDN's `@m
 
 ### `browsercompat_list_reference` <sub>tool</sub>
 
-- One required `topic`: `bcd_namespaces` (12), `bcd_browsers` (17), `browserslist_agents` (19), `baseline_states` (4), `groups` (104), `snapshots` (11)
-- Entries carry `id`, `label`, and `detail`, plus `count`, `reported`, `bcd_browser`, `usage_percent`, `maps_from`, or `spec_url` where the topic has them
-- `groups` and `snapshots` ids are the values `browsercompat_search_features` takes as `group` and `snapshot`
-- `browserslist_agents` gives each agent's browser-compat-data counterpart or `null` — the `null` ones can never be evaluated and always land in `unchecked_targets`
+- Required `topic`: `bcd_namespaces` (12), `bcd_browsers` (17), `browserslist_agents` (19), `baseline_states` (4), `groups` (104), or `snapshots` (11). Group and snapshot ids feed the search filters.
+- Entries carry `id`, `label`, and `detail`, plus `count`, `reported`, `bcd_browser`, `usage_percent`, `maps_from`, or `spec_url` where applicable. An agent's `bcd_browser: null` means support comparisons cannot evaluate it and report it in `unchecked_targets`.
 
 ---
 
 ### `browsercompat_get_feature` <sub>tool</sub>
 
-- One `feature` string, 1–200 characters: a BCD key (`css.selectors.has`) or a web-features id (`has`); `resolved_as` echoes which one matched and how
-- `resolve: true` falls back to the search index for a plain name or notation (`Container queries`, `Element.prototype.animate`) and accepts its best exact matches only when they name one feature: one key resolves to that key, several keys of one feature resolve to the feature with `compat_keys`, and two features are a miss. Off by default, so a typo returns a miss rather than a confident answer about the wrong feature
-- `include_runtimes: true` adds `bun`, `deno`, `nodejs`, and `oculus` rows to the 13 reported desktop and mobile browsers
-- `outcome` is `found` | `no_compat_data` | `miss` — a miss is `found: false` with `guidance`, never an error
-- A web-features id spanning more than one BCD key omits the per-key fields (`support`, `status`, `limiting_browser`, `mdn_url`, `spec_urls`) and returns `compat_keys` to re-call with
-- Typed failure: `invalid_feature_input` (whitespace-only `feature`)
+- One `feature`, 1–200 characters: a BCD key (`css.selectors.has`) or web-features id (`has`). `resolve: true` accepts a name or notation only when the best exact matches name one feature: one key resolves directly, several keys of one feature return `compat_keys`, and two features are a miss. Off by default.
+- `outcome` is `found`, `no_compat_data`, or `miss`; `resolved_as` records the match. A miss returns `found: false` with `guidance`. A multi-key id omits `support`, `status`, `limiting_browser`, `mdn_url`, and `spec_urls`; use `compat_keys` for a specific call. Whitespace-only input returns `invalid_feature_input`.
+- `include_runtimes: true` adds `bun`, `deno`, `nodejs`, and `oculus` support to the 13 desktop and mobile browser rows.
 
 ---
 
 ### `browsercompat_check_baseline` <sub>tool</sub>
 
-- Up to 20 BCD keys or web-features ids per call, 1–200 characters each; one result per entry, in input order
-- Each result carries Baseline state and dates, `limiting_browser`, `deprecated` / `experimental` / `discouraged`, and `usage_percent_excluded` alongside the `usage_source` it is a share of
-- `usage_percent_excluded` is absent — never zero — when the feature reaches no caniuse id
-- `all_widely_available` answers the Baseline question alone: every entry resolved at `widely`, one miss forces it false, and deprecation does not enter it
-- Typed failure: `invalid_feature_input` (a whitespace-only entry)
+- Up to 20 BCD keys or web-features ids, 1–200 characters each, with one result per entry in input order. A whitespace-only entry returns `invalid_feature_input`.
+- Results carry Baseline state and dates, `limiting_browser`, `deprecated`, `experimental`, `discouraged`, and `usage_percent_excluded` with its `usage_source`. Usage is absent, never zero, when no caniuse id exists.
+- `all_widely_available` requires every entry to resolve at `widely`; one miss makes it false, and it does not assess deprecation.
 
 ---
 
 ### `browsercompat_search_features` <sub>tool</sub>
 
-- `query` 1–100 characters: a plain name, a keyword, or code notation such as `Array.prototype.at`, `display: grid`, or `<dialog>`
-- Optional filters, combinable: `namespace` (one of the 12 BCD namespaces), `baseline` (`widely` | `newly` | `limited` | `not_mapped`), `group` (a web-features group, nested groups included), and `snapshot` (an ECMAScript edition such as `ecmascript-2023`)
-- `limit` 1–50, default 10, and `offset` (default 0) to page through the full ranking; `nextOffset` is present while matches remain
-- Every hit carries `matched_on`, the field that matched, so the six-tier ranking is inspectable rather than a score; `path_suffix` marks a key whose trailing segments match the dotted or property-value notation typed
-- `support_summary` is one line across the seven Baseline core browsers, with `—` for unsupported and `?` for unknown
-- Zero hits are a successful empty result plus a notice naming which filter to drop; `totalCount` counts every match, and an `offset` past it returns an empty page with a notice
-- Typed failures: `invalid_query` (a query that normalizes to zero tokens), `unknown_group`, `unknown_snapshot`
+- `query`, 1–100 characters, accepts names, keywords, or notation such as `Array.prototype.at`, `display: grid`, or `<dialog>`. Combine `namespace` (12 BCD namespaces), `baseline` (`widely`, `newly`, `limited`, `not_mapped`), `group` (including nested groups), and `snapshot` (such as `ecmascript-2023`).
+- `matched_on` explains the six-tier ranking; `path_suffix` marks trailing key segments matching the supplied notation. `support_summary` covers the seven Baseline core browsers (`—` unsupported, `?` unknown). Typed failures: `invalid_query` (zero searchable tokens), `unknown_group`, `unknown_snapshot`.
+- Page with `limit` (1–50, default 10) and `offset` (default 0); `totalCount` counts all matches and `nextOffset` appears while more remain. Zero hits succeed with a notice naming which filter to drop; an offset past the matches returns an empty page with a notice.
 
 ---
 
 ### `browsercompat_compare_support` <sub>tool</sub>
 
-- Up to 20 features against a required `targets` browserslist query (`defaults`, `> 0.5%, last 2 versions`) — required so browserslist never falls back to config in the server's working directory
-- `verdict` per feature: `clears` | `fails` | `inconclusive` | `miss` | `ambiguous`; `failing_targets` names each failing target with the verdict behind it (`partial`, `prefixed`, `flagged`, `removed`, `unsupported`, `preview_only`)
-- `unchecked_targets` lists every target the server declined to judge, with `no_bcd_browser` | `unknown_version` | `no_bcd_data`; `all_clear` requires that list to be empty
-- `target_coverage_percent` and `unchecked_coverage_percent` give the caniuse-derived traffic share of the evaluated and unevaluated tokens
-- Typed failures: `invalid_target_query`, `no_targets_resolved`, `invalid_feature_input`
+- Up to 20 features against a required `targets` browserslist query, such as `defaults` or `> 0.5%, last 2 versions`; local browserslist config is never used. Typed failures: `invalid_target_query`, `no_targets_resolved`, `invalid_feature_input`.
+- Each `verdict` is `clears`, `fails`, `inconclusive`, `miss`, or `ambiguous`. `failing_targets` names targets with `partial`, `prefixed`, `flagged`, `removed`, `unsupported`, or `preview_only` support.
+- `unchecked_targets` carries `no_bcd_browser`, `unknown_version`, or `no_bcd_data`; `all_clear` requires it to be empty. The response also includes caniuse-derived `target_coverage_percent` and `unchecked_coverage_percent`.
 
 ---
 
@@ -246,12 +233,18 @@ cp .env.example .env
 
 ## Configuration
 
-There are no server-specific environment variables: no API keys, no base URLs, and deliberately no browserslist configuration variable — the target query is always a tool input rather than ambient state. Only the framework transport settings apply.
+There are no server-specific environment variables: no API keys, no base URLs, and deliberately no browserslist configuration variable — the target query is always a tool input rather than ambient state. Framework transport, logging, and telemetry settings remain configurable.
 
 | Variable | Description | Default |
 |:---------|:------------|:--------|
 | `MCP_TRANSPORT_TYPE` | Transport: `stdio` or `http`. | `stdio` |
 | `MCP_HTTP_PORT` | Port for the HTTP server. | `3010` |
+| `MCP_SESSION_MODE` | HTTP session mode, explicitly set by `.env.example` and Docker. When unset, the framework's `auto` fallback resolves to `stateful`. | `stateless` |
+| `OTEL_ENABLED` | Enable OpenTelemetry; local installs need the framework's optional telemetry peers. Docker includes them by default. | `false` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Base URL for traces (`/v1/traces`) and metrics (`/v1/metrics`); signal-specific endpoints override it. | Unset |
+| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | Explicit OTLP log endpoint, used as-is; the base endpoint never enables log export. | Unset |
+| `LOG_TOOL_FAILURE_PAYLOADS` | Log failed-call arguments and results. Redaction matches key names only; free-form values can retain secrets. | `false` |
+| `LOG_TOOL_FAILURE_PAYLOAD_MAX_BYTES` | UTF-8 byte cap per logged payload. | `16384` |
 
 See [`.env.example`](./.env.example) for the full list of optional framework overrides.
 
