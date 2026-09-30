@@ -2,6 +2,10 @@
 
 All notable changes to this project. Each entry links to its full per-version file in [changelog/](changelog/).
 
+## [0.2.0](changelog/0.2.x/0.2.0.md) — 2026-09-30 · ⚠️ Breaking
+
+browsercompat_compare_support pages its target rows ten query targets at a time and counts a target as evaluated only where compatibility data was read, so a feature clears only when every target in the query was evaluated. Support notes and descriptions are plain text, and browsercompat_get_feature lists direct subkeys.
+
 ## [0.1.5](changelog/0.1.x/0.1.5.md) — 2026-09-26
 
 Framework 0.13.9 adoption with clearer argument recovery and guarded Docker telemetry installs.

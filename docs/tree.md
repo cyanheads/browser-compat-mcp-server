@@ -1,6 +1,6 @@
 # browser-compat-mcp-server - Directory Structure
 
-Generated on: 2026-09-22 18:56:53
+Generated on: 2026-09-30 11:38:58
 
 ```text
 browser-compat-mcp-server/
@@ -25,6 +25,7 @@ browser-compat-mcp-server/
 │   └── settings.json
 ├── changelog/
 │   ├── 0.1.x/
+│   ├── 0.2.x/
 │   └── template.md
 ├── docs/
 │   └── design.md
@@ -126,6 +127,7 @@ browser-compat-mcp-server/
 │   ├── clean-mcpb.ts
 │   ├── clean.ts
 │   ├── devcheck.ts
+│   ├── install-otel.ts
 │   ├── lint-mcp.ts
 │   ├── lint-packaging.ts
 │   ├── list-skills.ts
@@ -154,6 +156,7 @@ browser-compat-mcp-server/
 │   │   │   └── types.ts
 │   │   ├── bcd/
 │   │   │   ├── bcd-service.ts
+│   │   │   ├── bcd-text.ts
 │   │   │   └── types.ts
 │   │   ├── data-version/
 │   │   │   └── data-version-service.ts
@@ -165,6 +168,8 @@ browser-compat-mcp-server/
 │   │       └── types.ts
 │   ├── types/
 │   │   └── caniuse-lite.d.ts
+│   ├── utils/
+│   │   └── markdown-text.ts
 │   └── index.ts
 ├── tests/
 │   ├── data/
@@ -180,7 +185,9 @@ browser-compat-mcp-server/
 │   │   │   ├── feature-resolver.search-step.test.ts
 │   │   │   └── feature-resolver.test.ts
 │   │   ├── bcd/
-│   │   │   └── bcd-service.test.ts
+│   │   │   ├── bcd-service.test.ts
+│   │   │   ├── support-metadata.test.ts
+│   │   │   └── text-normalization.test.ts
 │   │   ├── data-version/
 │   │   │   └── data-version-service.test.ts
 │   │   ├── search/
@@ -189,13 +196,19 @@ browser-compat-mcp-server/
 │   │       └── targets-service.test.ts
 │   ├── smoke/
 │   │   └── tools-list.smoke.test.ts
-│   └── tools/
-│       ├── browsercompat-check-baseline.tool.test.ts
-│       ├── browsercompat-compare-support.tool.test.ts
-│       ├── browsercompat-get-feature.tool.test.ts
-│       ├── browsercompat-list-reference.tool.test.ts
-│       ├── browsercompat-search-features.tool.test.ts
-│       └── compat-shapes.test.ts
+│   ├── tools/
+│   │   ├── browsercompat-check-baseline.tool.test.ts
+│   │   ├── browsercompat-compare-support.contract.test.ts
+│   │   ├── browsercompat-compare-support.tool.test.ts
+│   │   ├── browsercompat-get-feature.tool.test.ts
+│   │   ├── browsercompat-list-reference.tool.test.ts
+│   │   ├── browsercompat-search-features.tool.test.ts
+│   │   ├── compat-shapes.test.ts
+│   │   ├── literal-rendering.test.ts
+│   │   ├── support-boundaries.test.ts
+│   │   └── support-contracts.test.ts
+│   └── utils/
+│       └── markdown-text.test.ts
 ├── .dockerignore
 ├── .env.example
 ├── .gitattributes
