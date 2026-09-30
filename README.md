@@ -39,7 +39,7 @@ Web platform compatibility for frontend work: per-browser support from MDN's `@m
 | `browsercompat_get_feature` | Full compatibility record for one feature: Baseline state, standards status, per-browser versions with flags and prefixes, MDN and specification links. |
 | `browsercompat_check_baseline` | Ship-or-not across up to 20 features: Baseline state and date, the limiting browser, deprecation flags, and the traffic share requiring it would exclude. |
 | `browsercompat_search_features` | Find features by plain name, keyword, or code notation when the canonical key is unknown, ranked with the field that matched, filterable by group or ECMAScript snapshot, and pageable. |
-| `browsercompat_compare_support` | Check features against an explicit browserslist target query, reporting the failing target per feature and every target that could not be evaluated. |
+| `browsercompat_compare_support` | Check features against an explicit browserslist target query: a whole-query verdict and evaluated coverage per feature, with the failing and unevaluated target rows paged ten query targets at a time. |
 
 ---
 
@@ -57,13 +57,16 @@ Web platform compatibility for frontend work: per-browser support from MDN's `@m
 - One `feature`, 1–200 characters: a BCD key (`css.selectors.has`) or web-features id (`has`). `resolve: true` accepts a name or notation only when the best exact matches name one feature: one key resolves directly, several keys of one feature return `compat_keys`, and two features are a miss. Off by default.
 - `outcome` is `found`, `no_compat_data`, or `miss`; `resolved_as` records the match. A miss returns `found: false` with `guidance`. A multi-key id omits `support`, `status`, `limiting_browser`, `mdn_url`, and `spec_urls`; use `compat_keys` for a specific call. Whitespace-only input returns `invalid_feature_input`.
 - `include_runtimes: true` adds `bun`, `deno`, `nodejs`, and `oculus` support to the 13 desktop and mobile browser rows.
+- Feature-level `discouraged` is independent of BCD `status`; `status.discouraged` remains a compatibility alias when status exists. Unsupported and preview-only rows retain their available notes and tracking links.
+- `limiting_browser` appears only when every Baseline core browser has full, unprefixed, unflagged support at a resolvable added release.
+- A key with direct callable children returns `subkeys: { total, keys, truncated, next_offset? }`, at most 100 at a time. Continue with `subkeys_offset` (integer ≥0, default 0). Call one child with this tool or up to 20 with `browsercompat_check_baseline`; grandchildren and structural nodes are excluded.
 
 ---
 
 ### `browsercompat_check_baseline` <sub>tool</sub>
 
 - Up to 20 BCD keys or web-features ids, 1–200 characters each, with one result per entry in input order. A whitespace-only entry returns `invalid_feature_input`.
-- Results carry Baseline state and dates, `limiting_browser`, `deprecated`, `experimental`, `discouraged`, and `usage_percent_excluded` with its `usage_source`. Usage is absent, never zero, when no caniuse id exists.
+- Results carry Baseline state and dates, `limiting_browser` under the full-support condition above, `deprecated`, `experimental`, and `discouraged`. `usage_percent_excluded` and `usage_source` describe the caniuse feature: a BCD key receives them only when it is the feature's sole declared compat key. Usage is absent when the scope differs or caniuse data is missing, never a fabricated zero.
 - `all_widely_available` requires every entry to resolve at `widely`; one miss makes it false, and it does not assess deprecation.
 
 ---
@@ -79,8 +82,10 @@ Web platform compatibility for frontend work: per-browser support from MDN's `@m
 ### `browsercompat_compare_support` <sub>tool</sub>
 
 - Up to 20 features against a required `targets` browserslist query, such as `defaults` or `> 0.5%, last 2 versions`; local browserslist config is never used. Typed failures: `invalid_target_query`, `no_targets_resolved`, `invalid_feature_input`.
-- Each `verdict` is `clears`, `fails`, `inconclusive`, `miss`, or `ambiguous`. `failing_targets` names targets with `partial`, `prefixed`, `flagged`, `removed`, `unsupported`, or `preview_only` support.
-- `unchecked_targets` carries `no_bcd_browser`, `unknown_version`, or `no_bcd_data`; `all_clear` requires it to be empty. The response also includes caniuse-derived `target_coverage_percent` and `unchecked_coverage_percent`.
+- Every call evaluates the whole query. Each `verdict` is `clears`, `fails`, `inconclusive`, `miss`, or `ambiguous`: `fails` when any evaluated target lacks support, `clears` only when every target in the query was evaluated and supports the feature, `inconclusive` otherwise. A query that includes a browser with no compatibility data, as `defaults` does, never clears. `all_clear` is true only when every feature clears.
+- A target counts as evaluated only where compatibility data was read for it. Each compared result carries `failing_total`, `evaluated_total`, `evaluated_coverage_percent`, `unchecked_total`, and `unchecked_coverage_percent`. The top level carries `comparable_features`, `targets_resolved_total`, `evaluated_targets_total`, `unchecked_targets_total`, and the caniuse-derived `target_coverage_percent` and `unchecked_coverage_percent`: the share covered by the targets evaluated for every compared feature, and by the rest of the query.
+- Target rows are paged with `target_offset` (integer ≥0, default 0) and `target_limit` (1–10, default 10). `targets_resolved` (the mapping inventory, each row flagged `evaluated`), `unchecked_targets`, and each result's `failing_targets` and `unchecked_targets` cover only the query targets on the page; verdicts, coverage, and totals are identical on every page. `totalCount` counts the targets in the query and `nextOffset` appears while more remain; an offset past the end returns the summaries with no rows and a notice.
+- `failing_targets` names targets with `partial`, `prefixed`, `flagged`, `removed`, `unsupported`, or `preview_only` support. `unchecked_targets` carries `no_bcd_browser`, `unknown_version`, `no_bcd_data`, or `no_comparable_feature` — the last when every entry was a miss or ambiguous, so nothing was compared.
 
 ---
 
@@ -88,12 +93,12 @@ Web platform compatibility for frontend work: per-browser support from MDN's `@m
 
 | Package | Version | License | Supplies |
 |:---|:---|:---|:---|
-| [`@mdn/browser-compat-data`](https://github.com/mdn/browser-compat-data) | `^8.1.2` | CC0-1.0 | Per-browser support, standards status, MDN and specification links |
-| [`web-features`](https://github.com/web-platform-dx/web-features) | `^3.39.0` | Apache-2.0 | Baseline state and dates, discouraged flags, groups, ECMAScript snapshots |
-| [`caniuse-lite`](https://github.com/browserslist/caniuse-lite) | `^1.0.30001810` | CC-BY-4.0 | Usage weighting, plus feature titles for the search index |
-| [`browserslist`](https://github.com/browserslist/browserslist) | `^4.29.0` | MIT | Target query resolution and coverage figures |
+| [`@mdn/browser-compat-data`](https://github.com/mdn/browser-compat-data) | `^8.1.3` | CC0-1.0 | Per-browser support, standards status, MDN and specification links |
+| [`web-features`](https://github.com/web-platform-dx/web-features) | `^3.40.0` | Apache-2.0 | Baseline state and dates, discouraged flags, groups, ECMAScript snapshots |
+| [`caniuse-lite`](https://github.com/browserslist/caniuse-lite) | `^1.0.30001812` | CC-BY-4.0 | Usage weighting, plus feature titles for the search index |
+| [`browserslist`](https://github.com/browserslist/browserslist) | `^4.29.1` | MIT | Target query resolution and coverage figures |
 
-CC BY 4.0 requires attribution wherever the caniuse data travels, so every response carrying a usage figure carries this string: `Usage data from caniuse.com, © Can I Use contributors, CC BY 4.0. Figures are a share of the ~96.7% of global traffic caniuse tracks.` Full license texts and notices are in [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md).
+CC BY 4.0 requires attribution wherever the caniuse data travels, so every response carrying a usage figure carries this string: `Usage data from caniuse.com, © Can I Use contributors, CC BY 4.0. Figures are a share of the ~97.3% of global traffic caniuse tracks.` Full license texts and notices are in [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md).
 
 ---
 
@@ -111,9 +116,10 @@ Browser-compat-specific:
 Agent-friendly output:
 
 - Every response echoes `data_version` — the version of each bundled dataset behind the answer, since a pinned snapshot goes stale on exactly the newest features
-- A verdict is never claimed for a browser that was not evaluated: unknown support moves the target into `unchecked_targets` and the feature to `inconclusive`
+- A pass is never claimed for a browser that was not evaluated: a feature clears a target query only when compatibility data was read for every target in it, and a target without data is reported in `unchecked_targets` and makes the verdict `inconclusive`
 - Misses are results, not failures — `found: false` with `guidance` naming the next call, and typed error reasons carrying recovery hints for the input a caller has to fix
 - Usage figures state the population they are a share of, and carry the caniuse attribution on every response that reports one
+- BCD markup becomes plain text with anchor labels and URLs preserved. Markdown renders literal names such as `<dialog>` visibly; structured text keeps the original plain-text element names.
 
 ---
 
