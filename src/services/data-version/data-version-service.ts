@@ -9,6 +9,7 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { z } from '@cyanheads/mcp-ts-core';
 import { getBcdService } from '@/services/bcd/bcd-service.js';
+import { markdownText } from '@/utils/markdown-text.js';
 
 /** Shape of the `data_version` enrichment every tool echoes. */
 export const DataVersionSchema = z.object({
@@ -27,9 +28,9 @@ export type DataVersion = z.infer<typeof DataVersionSchema>;
 /** One-line rendering of the dataset vintage for the `content[]` trailer. */
 export function renderDataVersion(version: DataVersion): string {
   return (
-    `**Data:** browser-compat-data ${version.bcd} (generated ${version.bcd_generated}) · ` +
-    `web-features ${version.web_features} · caniuse-lite ${version.caniuse_lite} · ` +
-    `browserslist ${version.browserslist}`
+    `**Data:** browser-compat-data ${markdownText(version.bcd)} (generated ${markdownText(version.bcd_generated)}) · ` +
+    `web-features ${markdownText(version.web_features)} · caniuse-lite ${markdownText(version.caniuse_lite)} · ` +
+    `browserslist ${markdownText(version.browserslist)}`
   );
 }
 

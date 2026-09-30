@@ -247,7 +247,7 @@ data is conveyed, so alongside this file every tool response that quotes a usage
 carries this string verbatim in its `attribution` field:
 
 > Usage data from caniuse.com, © Can I Use contributors, CC BY 4.0. Figures are a share of
-> the ~96.7% of global traffic caniuse tracks.
+> the ~97.3% of global traffic caniuse tracks.
 
 Full license: https://creativecommons.org/licenses/by/4.0/legalcode
 

@@ -34,7 +34,7 @@ describe('browsercompat_check_baseline — worked example', () => {
     expect(result.all_widely_available).toBe(false);
   });
 
-  it('has: widely, limiting_browser firefox 121, deprecated/experimental false, usage excluded 2.6222%', async () => {
+  it('has: widely, limiting_browser firefox 121, deprecated/experimental false, usage excluded 2.4496%', async () => {
     const { result } = await run(['has']);
     const has = result.results[0];
     expect(has).toMatchObject({
@@ -46,9 +46,22 @@ describe('browsercompat_check_baseline — worked example', () => {
       deprecated: false,
       experimental: false,
       usage_source:
-        'Share of the roughly 96.7% of global traffic caniuse tracks, not of all traffic.',
+        'Feature-level caniuse figure; reported for a BCD key only when it is the feature’s sole declared compat key. Share of the roughly 97.3% of global traffic caniuse tracks, not of all traffic.',
     });
-    expect(has?.usage_percent_excluded).toBeCloseTo(2.6222, 3);
+    expect(has?.usage_percent_excluded).toBeCloseTo(2.4496, 3);
+  });
+
+  it('usage_source states the tracked-traffic share the bundled caniuse-lite data sums to', async () => {
+    const { agents } = await import('caniuse-lite');
+    const tracked = Object.values(agents).reduce(
+      (sum, agent) =>
+        sum + Object.values(agent?.usage_global ?? {}).reduce((total, usage) => total + usage, 0),
+      0,
+    );
+    const { result } = await run(['has']);
+    expect(result.results[0]?.usage_source).toContain(
+      `roughly ${tracked.toFixed(1)}% of global traffic`,
+    );
   });
 
   it('intersection-observer-v2: limited, no compat_keys, usage still computed via caniuse mapping, no limiting_browser', async () => {
@@ -138,7 +151,7 @@ describe('browsercompat_check_baseline — all_widely_available (D30)', () => {
 describe('browsercompat_check_baseline — enrichment', () => {
   it('always echoes data_version and totalCount', async () => {
     const { ctx, result } = await run(['has', 'intersection-observer-v2']);
-    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.2' });
+    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.3' });
     expect(getEnrichment(ctx).totalCount).toBe(2);
     expect(result.results).toHaveLength(2);
   });
@@ -177,7 +190,7 @@ describe('browsercompat_check_baseline — resolve: true', () => {
   });
 
   it('a multi-key feature name reports the feature-level Baseline and its compat_keys', async () => {
-    const { result } = await run(['Container queries', 'Cascade layers'], true);
+    const { result } = await run(['Container queries (size)', 'Cascade layers'], true);
     const baseline = await getBaselineService();
     const [containers, layers] = result.results;
     expect(containers).toMatchObject({

@@ -17,7 +17,7 @@ describe('browsercompat_list_reference — bcd_namespaces', () => {
     expect(result.topic).toBe('bcd_namespaces');
     expect(result.entries).toHaveLength(12);
     const api = result.entries.find((e) => e.id === 'api');
-    expect(api).toMatchObject({ label: 'Web APIs', count: 10_265 });
+    expect(api).toMatchObject({ label: 'Web APIs', count: 10_263 });
     expect(api?.detail).toContain('api.');
   });
 
@@ -30,7 +30,7 @@ describe('browsercompat_list_reference — bcd_namespaces', () => {
     const blocks = browsercompatListReference.format?.(result);
     const text = (blocks?.[0] as { text: string } | undefined)?.text;
     expect(text).toContain('## api — Web APIs');
-    expect(text).toContain('- count: 10265');
+    expect(text).toContain('- count: 10263');
   });
 });
 
@@ -95,7 +95,7 @@ describe('browsercompat_list_reference — browserslist_agents', () => {
 });
 
 describe('browsercompat_list_reference — baseline_states (D28)', () => {
-  it('reports the per-BCD-key split (not the per-feature split), summing to all 20,543 leaves', async () => {
+  it('reports the per-BCD-key split (not the per-feature split), summing to all 20,647 leaves', async () => {
     const ctx = createMockContext();
     const result = await browsercompatListReference.handler(
       browsercompatListReference.input.parse({ topic: 'baseline_states' }),
@@ -103,9 +103,9 @@ describe('browsercompat_list_reference — baseline_states (D28)', () => {
     );
     expect(result.entries).toHaveLength(4);
     const counts = Object.fromEntries(result.entries.map((e) => [e.id, e.count]));
-    expect(counts).toEqual({ widely: 8_746, newly: 1_256, limited: 5_480, not_mapped: 5_061 });
+    expect(counts).toEqual({ widely: 8_758, newly: 1_251, limited: 5_478, not_mapped: 5_160 });
     const total = Object.values(counts).reduce((a, b) => (a ?? 0) + (b ?? 0), 0);
-    expect(total).toBe(20_543);
+    expect(total).toBe(20_647);
   });
 
   it('maps_from carries the raw web-features value, null only for not_mapped', async () => {
@@ -179,6 +179,6 @@ describe('browsercompat_list_reference — enrichment', () => {
       browsercompatListReference.input.parse({ topic: 'groups' }),
       ctx,
     );
-    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.2' });
+    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.3' });
   });
 });

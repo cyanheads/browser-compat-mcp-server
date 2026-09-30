@@ -16,6 +16,7 @@ import {
   renderDataVersion,
 } from '@/services/data-version/data-version-service.js';
 import { getSearchService, tokenize } from '@/services/search/search-service.js';
+import { markdownText } from '@/utils/markdown-text.js';
 import { formatSupportSummary } from './compat-shapes.js';
 
 const ResultSchema = z.object({
@@ -158,16 +159,24 @@ export const browsercompatSearchFeatures = tool('browsercompat_search_features',
     appliedFilters: {
       render: (filters) =>
         `**Filters:** ${[
-          filters?.namespace === undefined ? undefined : `namespace ${filters.namespace}`,
-          filters?.baseline === undefined ? undefined : `baseline ${filters.baseline}`,
-          filters?.group === undefined ? undefined : `group ${filters.group} (and nested groups)`,
-          filters?.snapshot === undefined ? undefined : `snapshot ${filters.snapshot}`,
+          filters?.namespace === undefined
+            ? undefined
+            : `namespace ${markdownText(filters.namespace)}`,
+          filters?.baseline === undefined
+            ? undefined
+            : `baseline ${markdownText(filters.baseline)}`,
+          filters?.group === undefined
+            ? undefined
+            : `group ${markdownText(filters.group)} (and nested groups)`,
+          filters?.snapshot === undefined
+            ? undefined
+            : `snapshot ${markdownText(filters.snapshot)}`,
         ]
           .filter(Boolean)
           .join(' · ')}`,
     },
-    noMatchNotice: { label: 'No matches' },
-    offsetNotice: { label: 'Past the end' },
+    noMatchNotice: { render: (value) => `**No matches:** ${markdownText(value ?? '')}` },
+    offsetNotice: { render: (value) => `**Past the end:** ${markdownText(value ?? '')}` },
   },
 
   errors: [
@@ -200,9 +209,7 @@ export const browsercompatSearchFeatures = tool('browsercompat_search_features',
 
     const query = input.query.trim();
     if (tokenize(query).length === 0) {
-      throw ctx.fail('invalid_query', `"${input.query}" normalizes to zero searchable tokens.`, {
-        ...ctx.recoveryFor('invalid_query'),
-      });
+      throw ctx.fail('invalid_query', `"${input.query}" normalizes to zero searchable tokens.`);
     }
 
     const [bcd, baseline, search] = await Promise.all([
@@ -217,9 +224,7 @@ export const browsercompatSearchFeatures = tool('browsercompat_search_features',
       });
     }
     if (input.snapshot !== undefined && !Object.hasOwn(baseline.snapshots, input.snapshot)) {
-      throw ctx.fail('unknown_snapshot', `"${input.snapshot}" is not an ECMAScript snapshot.`, {
-        ...ctx.recoveryFor('unknown_snapshot'),
-      });
+      throw ctx.fail('unknown_snapshot', `"${input.snapshot}" is not an ECMAScript snapshot.`);
     }
 
     const filters = {
@@ -277,16 +282,18 @@ export const browsercompatSearchFeatures = tool('browsercompat_search_features',
     const lines = [`# ${result.results.length} matches`];
     for (const item of result.results) {
       lines.push('');
-      lines.push(`## ${item.name ?? item.bcd_key ?? item.baseline_id ?? 'Match'}`);
+      lines.push(`## ${markdownText(item.name ?? item.bcd_key ?? item.baseline_id ?? 'Match')}`);
       const identity = [
-        item.bcd_key === undefined ? undefined : `bcd_key ${item.bcd_key}`,
-        item.baseline_id === undefined ? undefined : `baseline_id ${item.baseline_id}`,
+        item.bcd_key === undefined ? undefined : `bcd_key ${markdownText(item.bcd_key)}`,
+        item.baseline_id === undefined
+          ? undefined
+          : `baseline_id ${markdownText(item.baseline_id)}`,
       ].filter(Boolean);
       if (identity.length > 0) lines.push(identity.join(' · '));
       lines.push(`**baseline_state:** ${item.baseline_state} · **matched_on:** ${item.matched_on}`);
-      lines.push(`**support_summary:** ${item.support_summary}`);
-      if (item.description) lines.push(item.description);
-      if (item.mdn_url) lines.push(`MDN: ${item.mdn_url}`);
+      lines.push(`**support_summary:** ${markdownText(item.support_summary)}`);
+      if (item.description) lines.push(markdownText(item.description));
+      if (item.mdn_url) lines.push(`MDN: ${markdownText(item.mdn_url)}`);
     }
     return [{ type: 'text', text: lines.join('\n') }];
   },

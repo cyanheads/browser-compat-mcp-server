@@ -155,7 +155,7 @@ describe('resolveFeature — resolve: true search fallback (step 6, D6)', () => 
   });
 
   it.each([
-    ['Container queries', 'container-queries', 12],
+    ['Container queries (size)', 'container-queries', 12],
     ['Cascade layers', 'cascade-layers', 8],
   ])(
     'resolves "%s" through its feature: every tier 2 row carries one baseline_id',

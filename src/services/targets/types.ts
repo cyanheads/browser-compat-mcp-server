@@ -4,8 +4,17 @@
  * @module services/targets/types
  */
 
-/** Why a resolved target could not be checked against compatibility data. */
-export type UncheckedReason = 'no_bcd_browser' | 'unknown_version' | 'no_bcd_data';
+/**
+ * Why a query target was not evaluated. The first two come from mapping the
+ * token onto a release; `no_bcd_data` means a compared feature records nothing
+ * for the mapped browser, and `no_comparable_feature` means the call held no
+ * feature that could be compared at all.
+ */
+export type UncheckedReason =
+  | 'no_bcd_browser'
+  | 'unknown_version'
+  | 'no_bcd_data'
+  | 'no_comparable_feature';
 
 /** A browserslist token that mapped onto a concrete BCD release. */
 export interface ResolvedTarget {

@@ -384,9 +384,9 @@ describe('SearchService#rank — group and snapshot filters (synthetic index)', 
 });
 
 describe('SearchService — real bundled index', () => {
-  it('has 20,564 rows: every BCD leaf plus the 21 compat_features-less features', async () => {
+  it('has 20,668 rows: every BCD leaf plus the 21 compat_features-less features', async () => {
     const search = await getSearchService();
-    expect(search.size).toBe(20_564);
+    expect(search.size).toBe(20_668);
   });
 
   it('"container query" limit-relevant query surfaces the container-queries feature via path_segment', async () => {
@@ -399,18 +399,19 @@ describe('SearchService — real bundled index', () => {
     expect(top?.matched_on).toBe('path_segment');
   });
 
-  it('BCD descriptions reach the index with their markup stripped', async () => {
+  it('BCD descriptions reach the index normalized once with link destinations retained', async () => {
     const search = await getSearchService();
     const key = 'api.Element.getHTML.escapes_lt_gt_in_attributes';
     const row = search.rank(key, {})[0]?.row;
     expect(row?.bcd_key).toBe(key);
     expect(row?.description).toBe(
-      'Serializes < and > in attributes as &lt; and &gt; (see this spec issue )',
+      'Serializes < and > in attributes as &lt; and &gt; (see this spec issue (https://github.com/whatwg/html/issues/6235))',
     );
     expect(row?.descriptionTokens).toContain('serializes');
-    for (const markup of ['code', 'href', 'github', 'https']) {
+    for (const markup of ['code', 'href']) {
       expect(row?.descriptionTokens).not.toContain(markup);
     }
+    expect(row?.descriptionTokens).toContain('https');
   });
 });
 
@@ -434,24 +435,21 @@ describe('SearchService — ranking pins for queries the path_suffix tier and ta
     ]);
   });
 
-  it('"Container queries": 30 hits, led by tier 2 name rows', async () => {
+  it('"Container queries": 30 hits, led by tier 3 name rows', async () => {
     const hits = (await getSearchService()).rank('Container queries', {});
-    /**
-     * 29 before `<` and `>` became punctuation: the 30th is a description that
-     * decodes to "<container-query> is optional", whose token the tag pass erased.
-     */
+    // The feature name is "Container queries (size)", so this is a substring match.
     expect(hits).toHaveLength(30);
     expect(
       pin(
         hits.filter((hit) => hit.tier === 5),
         1,
       ),
-    ).toEqual(['css.at-rules.container.container-query_optional|5|description']);
+    ).toEqual(['css.properties.container-name.name-only_queries|5|description']);
     expect(pin(hits, 4)).toEqual([
-      'api.CSSContainerRule|2|name',
-      'api.CSSContainerRule.containerName|2|name',
-      'api.CSSContainerRule.containerQuery|2|name',
-      'css.at-rules.container|2|name',
+      'api.CSSContainerRule|3|name',
+      'api.CSSContainerRule.containerName|3|name',
+      'api.CSSContainerRule.containerQuery|3|name',
+      'css.at-rules.container|3|name',
     ]);
   });
 
@@ -492,7 +490,7 @@ describe('SearchService — ranking pins for queries the path_suffix tier and ta
       'css.properties.grid|1|baseline_id',
     ]);
     const display = search.rank('display', { namespace: 'css' });
-    expect(display).toHaveLength(341);
+    expect(display).toHaveLength(354);
     expect(pin(display, 1)).toEqual(['css.properties.display|1|baseline_id']);
     const has = search.rank('has', { baseline: 'widely' });
     expect(has).toHaveLength(254);

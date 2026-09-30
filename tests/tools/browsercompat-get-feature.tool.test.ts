@@ -174,7 +174,7 @@ describe('browsercompat_get_feature — Baseline not_mapped enrichment (D14)', (
 describe('browsercompat_get_feature — enrichment: data_version', () => {
   it('always echoes data_version, even on a miss', async () => {
     const { ctx } = await run({ feature: 'nope-xyz' });
-    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.2' });
+    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.3' });
   });
 });
 
@@ -185,17 +185,17 @@ describe('browsercompat_get_feature — resolve: true', () => {
   });
 
   it('a name shared across a multi-key feature resolves through the feature, with compat_keys', async () => {
-    const { result } = await run({ feature: 'Container queries', resolve: true });
+    const { result } = await run({ feature: 'Container queries (size)', resolve: true });
     expect(result).toMatchObject({
       found: true,
       outcome: 'found',
       resolved_as: {
-        input: 'Container queries',
+        input: 'Container queries (size)',
         bcd_key: null,
         baseline_id: 'container-queries',
         resolved_via: 'search',
       },
-      name: 'Container queries',
+      name: 'Container queries (size)',
     });
     expect(result.compat_keys).toHaveLength(12);
     expect(result.support).toBeUndefined();
@@ -261,9 +261,9 @@ describe('browsercompat_get_feature — format()', () => {
     expect(text).toContain('**Limiting browser:** Firefox (firefox) 121');
     expect(text).toContain('## Support');
     expect(text).toContain(
-      'MDN: https://developer.mozilla.org/docs/Web/CSS/Reference/Selectors/:has',
+      'MDN: <https://developer.mozilla.org/docs/Web/CSS/Reference/Selectors/:has>',
     );
-    expect(text).toContain('Spec: https://drafts.csswg.org/selectors/#relational');
+    expect(text).toContain('Spec: <https://drafts.csswg.org/selectors/#relational>');
   });
 
   it('renders a status-absent line for a webextensions leaf rather than omitting the section', async () => {
@@ -288,7 +288,8 @@ describe('browsercompat_get_feature — format()', () => {
     const blocks = browsercompatGetFeature.format?.(result);
     const text = (blocks?.[0] as { text: string } | undefined)?.text;
     expect(text).toContain('**compat_keys:** none — this entry owns no browser-compat-data keys');
-    expect(text).toContain(result.guidance ?? '');
+    expect(result.guidance).toContain('browsercompat_check_baseline');
+    expect(text).toContain(result.guidance);
   });
 
   it('renders the "No match" heading and guidance on a miss', async () => {

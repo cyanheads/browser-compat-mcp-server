@@ -7,6 +7,7 @@
  */
 
 import { z } from '@cyanheads/mcp-ts-core';
+import { markdownText } from '@/utils/markdown-text.js';
 
 /** How a caller's feature string was matched, echoed on every response. */
 export const ResolvedAsSchema = z.object({
@@ -120,7 +121,7 @@ export const SupportRowSchema = z.object({
     .describe('Links to bugs or issues tracking the implementation, always an array.'),
 });
 
-/** The core-set browser requiring the newest release. */
+/** The core-set browser requiring the newest release, only after full support in every core browser. */
 export const LimitingBrowserSchema = z.object({
   browser_id: z.string().describe('browser-compat-data browser id.'),
   name: z.string().describe('Human-readable browser name.'),
@@ -136,8 +137,9 @@ export type SupportRowOutput = z.infer<typeof SupportRowSchema>;
 /** Render the Baseline block as one line, including every field present. */
 export function formatBaselineLine(baseline: BaselineOutput): string {
   const parts = [`**Baseline: ${baseline.state}**`];
-  if (baseline.since_date !== undefined) parts.push(`since_date ${baseline.since_date}`);
-  if (baseline.high_date !== undefined) parts.push(`high_date ${baseline.high_date}`);
+  if (baseline.since_date !== undefined)
+    parts.push(`since_date ${markdownText(baseline.since_date)}`);
+  if (baseline.high_date !== undefined) parts.push(`high_date ${markdownText(baseline.high_date)}`);
   if (baseline.date_is_upper_bound !== undefined) {
     parts.push(`date_is_upper_bound ${baseline.date_is_upper_bound}`);
   }
@@ -146,26 +148,33 @@ export function formatBaselineLine(baseline: BaselineOutput): string {
 
 /** Render one support row, emitting only the fields the data actually carries. */
 export function formatSupportRow(row: SupportRowOutput): string[] {
-  const lines = [`- **${row.browser_name}** (${row.browser_id}): ${row.verdict}`];
-  if (row.version_added !== undefined) lines.push(`  - version_added: ${row.version_added}`);
+  const lines = [
+    `- **${markdownText(row.browser_name)}** (${markdownText(row.browser_id)}): ${row.verdict}`,
+  ];
+  if (row.version_added !== undefined)
+    lines.push(`  - version_added: ${markdownText(row.version_added)}`);
   if (row.version_added_is_upper_bound !== undefined) {
     lines.push(`  - version_added_is_upper_bound: ${row.version_added_is_upper_bound}`);
   }
-  if (row.version_removed !== undefined) lines.push(`  - version_removed: ${row.version_removed}`);
-  if (row.version_last !== undefined) lines.push(`  - version_last: ${row.version_last}`);
+  if (row.version_removed !== undefined)
+    lines.push(`  - version_removed: ${markdownText(row.version_removed)}`);
+  if (row.version_last !== undefined)
+    lines.push(`  - version_last: ${markdownText(row.version_last)}`);
   if (row.partial !== undefined) lines.push(`  - partial: ${row.partial}`);
-  if (row.prefix !== undefined) lines.push(`  - prefix: ${row.prefix}`);
+  if (row.prefix !== undefined) lines.push(`  - prefix: ${markdownText(row.prefix)}`);
   if (row.alternative_name !== undefined) {
-    lines.push(`  - alternative_name: ${row.alternative_name}`);
+    lines.push(`  - alternative_name: ${markdownText(row.alternative_name)}`);
   }
   if (row.flags !== undefined) {
     for (const flag of row.flags) {
-      const value = flag.value_to_set === undefined ? '' : ` value_to_set ${flag.value_to_set}`;
-      lines.push(`  - flags: ${flag.type} ${flag.name}${value}`);
+      const value =
+        flag.value_to_set === undefined ? '' : ` value_to_set ${markdownText(flag.value_to_set)}`;
+      lines.push(`  - flags: ${flag.type} ${markdownText(flag.name)}${value}`);
     }
   }
-  if (row.notes !== undefined) lines.push(`  - notes: ${row.notes.join(' | ')}`);
-  if (row.impl_url !== undefined) lines.push(`  - impl_url: ${row.impl_url.join(' ')}`);
+  if (row.notes !== undefined) lines.push(`  - notes: ${row.notes.map(markdownText).join(' | ')}`);
+  if (row.impl_url !== undefined)
+    lines.push(`  - impl_url: ${row.impl_url.map(markdownText).join(' ')}`);
   return lines;
 }
 

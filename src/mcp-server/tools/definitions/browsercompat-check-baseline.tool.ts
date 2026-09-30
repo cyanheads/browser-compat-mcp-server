@@ -15,7 +15,12 @@ import {
   getDataVersion,
   renderDataVersion,
 } from '@/services/data-version/data-version-service.js';
-import { CANIUSE_ATTRIBUTION, getTargetsService } from '@/services/targets/targets-service.js';
+import {
+  CANIUSE_ATTRIBUTION,
+  CANIUSE_TRACKED_PERCENT,
+  getTargetsService,
+} from '@/services/targets/targets-service.js';
+import { markdownText } from '@/utils/markdown-text.js';
 import {
   BaselineSchema,
   DiscouragedSchema,
@@ -25,8 +30,7 @@ import {
 } from './compat-shapes.js';
 
 /** What the usage figure is a share of, stated on every result that carries one. */
-const USAGE_SOURCE =
-  'Share of the roughly 96.7% of global traffic caniuse tracks, not of all traffic.';
+const USAGE_SOURCE = `Feature-level caniuse figure; reported for a BCD key only when it is the feature’s sole declared compat key. Share of the roughly ${CANIUSE_TRACKED_PERCENT}% of global traffic caniuse tracks, not of all traffic.`;
 
 const ResultSchema = z.object({
   input: z.string().describe('The feature string as the caller sent it.'),
@@ -42,7 +46,7 @@ const ResultSchema = z.object({
   name: z.string().optional().describe('web-features display name for the feature.'),
   baseline: BaselineSchema.optional().describe('Baseline state and the dates it crossed.'),
   limiting_browser: LimitingBrowserSchema.optional().describe(
-    'Among the Baseline core browsers, the one requiring the newest release.',
+    'Among the Baseline core browsers, the one requiring the newest release. Present only when every core browser has full, unprefixed, unflagged support at a resolvable added release.',
   ),
   deprecated: z
     .boolean()
@@ -63,7 +67,7 @@ const ResultSchema = z.object({
     .number()
     .optional()
     .describe(
-      'Share of tracked global traffic that requiring this feature would exclude. Absent when the feature reaches no caniuse id — never zero in that case.',
+      'Feature-level share of tracked traffic excluded. A resolved BCD key receives it only when it is the feature’s sole declared compat key. Absent without caniuse data — never zero in that case.',
     ),
   usage_source: z
     .string()
@@ -95,7 +99,7 @@ export const browsercompatCheckBaseline = tool('browsercompat_check_baseline', {
       .boolean()
       .default(false)
       .describe(
-        'When true, an entry that is neither a key nor an id falls back to the search index, such as "Container queries" or "Element.prototype.animate". Its best exact matches are accepted only when they name one feature: a single key resolves to that key, several keys of one web-features feature resolve to the feature with its feature-level Baseline and compat_keys, and matches spanning two features are a miss. Off by default so a typo returns a miss you can correct.',
+        'When true, an entry that is neither a key nor an id falls back to the search index, such as "Container queries (size)" or "Element.prototype.animate". Its best exact matches are accepted only when they name one feature: a single key resolves to that key, several keys of one web-features feature resolve to the feature with its feature-level Baseline and compat_keys, and matches spanning two features are a miss. Off by default so a typo returns a miss you can correct.',
       ),
   }),
 
@@ -125,8 +129,8 @@ export const browsercompatCheckBaseline = tool('browsercompat_check_baseline', {
 
   enrichmentTrailer: {
     data_version: { render: renderDataVersion },
-    attribution: { label: 'Usage data' },
-    unresolvedNotice: { label: 'Unresolved' },
+    attribution: { render: (value) => `**Usage data:** ${markdownText(value ?? '')}` },
+    unresolvedNotice: { render: (value) => `**Unresolved:** ${markdownText(value ?? '')}` },
   },
 
   errors: [
@@ -195,8 +199,12 @@ export const browsercompatCheckBaseline = tool('browsercompat_check_baseline', {
       const limiting =
         leaf === undefined ? undefined : bcd.limitingBrowser(leaf, baseline.coreBrowserIds);
       const discouraged = featureId === null ? undefined : baseline.discouraged(featureId);
+      const featureKeys = featureId === null ? [] : baseline.compatKeys(featureId);
+      const usageMatches = key === null || (featureKeys.length === 1 && featureKeys[0] === key);
       const excluded =
-        featureId === null ? undefined : targets.excludedUsage(baseline.caniuseIds(featureId));
+        featureId === null || !usageMatches
+          ? undefined
+          : targets.excludedUsage(baseline.caniuseIds(featureId));
       if (excluded !== undefined) anyUsage = true;
 
       results.push({
@@ -243,38 +251,39 @@ export const browsercompatCheckBaseline = tool('browsercompat_check_baseline', {
     lines.push(`**all_widely_available:** ${result.all_widely_available}`);
     for (const item of result.results) {
       lines.push('');
-      lines.push(`## ${item.name ?? item.input}`);
+      lines.push(`## ${markdownText(item.name ?? item.input)}`);
       lines.push(
-        `**input:** ${item.input} · **found:** ${item.found} · **outcome:** ${item.outcome}`,
+        `**input:** ${markdownText(item.input)} · **found:** ${item.found} · **outcome:** ${item.outcome}`,
       );
       if (item.resolved_as) {
         lines.push(
-          `**Resolved:** "${item.resolved_as.input}" → bcd_key ${item.resolved_as.bcd_key ?? 'none'} · baseline_id ${item.resolved_as.baseline_id ?? 'none'} · via ${item.resolved_as.resolved_via}`,
+          `**Resolved:** "${markdownText(item.resolved_as.input)}" → bcd_key ${markdownText(item.resolved_as.bcd_key ?? 'none')} · baseline_id ${markdownText(item.resolved_as.baseline_id ?? 'none')} · via ${item.resolved_as.resolved_via}`,
         );
       }
       if (item.baseline) lines.push(formatBaselineLine(item.baseline));
       if (item.limiting_browser) {
         lines.push(
-          `**Limiting browser:** ${item.limiting_browser.name} (${item.limiting_browser.browser_id}) ${item.limiting_browser.version}`,
+          `**Limiting browser:** ${markdownText(item.limiting_browser.name)} (${markdownText(item.limiting_browser.browser_id)}) ${markdownText(item.limiting_browser.version)} — full support in every core browser`,
         );
       }
       if (item.deprecated !== undefined) lines.push(`**deprecated:** ${item.deprecated}`);
       if (item.experimental !== undefined) lines.push(`**experimental:** ${item.experimental}`);
       if (item.discouraged) {
         lines.push(
-          `**Discouraged:** ${item.discouraged.reason} (according_to ${item.discouraged.according_to.join(', ')})`,
+          `**Discouraged:** ${markdownText(item.discouraged.reason)} (according_to ${item.discouraged.according_to.map(markdownText).join(', ')})`,
         );
       }
       if (item.usage_percent_excluded !== undefined) {
         lines.push(`**usage_percent_excluded:** ${item.usage_percent_excluded}%`);
       }
-      if (item.usage_source !== undefined) lines.push(`**usage_source:** ${item.usage_source}`);
+      if (item.usage_source !== undefined)
+        lines.push(`**usage_source:** ${markdownText(item.usage_source)}`);
       if (item.compat_keys) {
         lines.push(
-          `**compat_keys:** ${item.compat_keys.length === 0 ? 'none — this entry owns no browser-compat-data keys' : item.compat_keys.join(', ')}`,
+          `**compat_keys:** ${item.compat_keys.length === 0 ? 'none — this entry owns no browser-compat-data keys' : item.compat_keys.map(markdownText).join(', ')}`,
         );
       }
-      if (item.guidance) lines.push(item.guidance);
+      if (item.guidance) lines.push(markdownText(item.guidance));
     }
     return [{ type: 'text', text: lines.join('\n') }];
   },

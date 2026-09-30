@@ -15,7 +15,7 @@ import {
   getDataVersion,
   renderDataVersion,
 } from '@/services/data-version/data-version-service.js';
-import { stripTags } from '@/services/search/search-service.js';
+import { markdownText } from '@/utils/markdown-text.js';
 import {
   BaselineSchema,
   DiscouragedSchema,
@@ -56,13 +56,21 @@ export const browsercompatGetFeature = tool('browsercompat_get_feature', {
       .boolean()
       .default(false)
       .describe(
-        'When true, a string that is neither a key nor an id falls back to the search index, such as "Container queries" or "Element.prototype.animate". Its best exact matches are accepted only when they name one feature: a single key resolves to that key, several keys of one web-features feature resolve to the feature with compat_keys, and matches spanning two features are a miss. Off by default so a typo returns a miss you can correct rather than a confident answer about the wrong feature.',
+        'When true, a string that is neither a key nor an id falls back to the search index, such as "Container queries (size)" or "Element.prototype.animate". Its best exact matches are accepted only when they name one feature: a single key resolves to that key, several keys of one web-features feature resolve to the feature with compat_keys, and matches spanning two features are a miss. Off by default so a typo returns a miss you can correct rather than a confident answer about the wrong feature.',
       ),
     include_runtimes: z
       .boolean()
       .default(false)
       .describe(
         'Add the bun, deno, nodejs, and oculus rows to support. Leave off for browser ship decisions.',
+      ),
+    subkeys_offset: z
+      .number()
+      .int()
+      .min(0)
+      .default(0)
+      .describe(
+        'Direct child keys to skip, default 0. Each subkeys page contains at most 100 keys; pass its next_offset to continue.',
       ),
   }),
 
@@ -89,8 +97,11 @@ export const browsercompatGetFeature = tool('browsercompat_get_feature', {
     status: StatusSchema.optional().describe(
       'Standards status for the resolved key. Absent for webextensions keys, which record none, and when the id spans more than one key.',
     ),
+    discouraged: DiscouragedSchema.optional().describe(
+      'Feature-level discouragement, independent of leaf standards status. Also retained in status.discouraged when status exists.',
+    ),
     limiting_browser: LimitingBrowserSchema.optional().describe(
-      'Among the Baseline core browsers, the one requiring the newest release. Absent until every core browser has shipped a resolvable version.',
+      'Among the Baseline core browsers, the one requiring the newest release. Present only when every core browser has full, unprefixed, unflagged support at a resolvable added release.',
     ),
     support: z
       .array(SupportRowSchema.describe('Support for one reported browser.'))
@@ -109,6 +120,25 @@ export const browsercompatGetFeature = tool('browsercompat_get_feature', {
       .describe(
         'Present when the web-features id spans more than one browser-compat-data key. Call this tool again with one of them for the per-browser fields.',
       ),
+    subkeys: z
+      .object({
+        total: z.number().int().describe('Total direct callable child keys, before paging.'),
+        keys: z
+          .array(z.string())
+          .describe(
+            'At most 100 direct child keys, in BCD traversal order. Call browsercompat_get_feature for one, or browsercompat_check_baseline for up to 20.',
+          ),
+        truncated: z.boolean().describe('True when more direct children remain after this page.'),
+        next_offset: z
+          .number()
+          .int()
+          .optional()
+          .describe('Offset for the next page; absent at or past the end.'),
+      })
+      .optional()
+      .describe(
+        'Direct child compat records of the resolved BCD key. Absent for childless keys and resolutions without a single key.',
+      ),
     guidance: z.string().optional().describe('What to do next on a miss or with no compat data.'),
   }),
 
@@ -126,8 +156,8 @@ export const browsercompatGetFeature = tool('browsercompat_get_feature', {
 
   enrichmentTrailer: {
     data_version: { render: renderDataVersion },
-    baselineNotMapped: { label: 'Baseline mapping' },
-    runtimesExcluded: { label: 'Runtimes' },
+    baselineNotMapped: { render: (value) => `**Baseline mapping:** ${markdownText(value ?? '')}` },
+    runtimesExcluded: { render: (value) => `**Runtimes:** ${markdownText(value ?? '')}` },
   },
 
   errors: [
@@ -146,9 +176,7 @@ export const browsercompatGetFeature = tool('browsercompat_get_feature', {
 
     const query = input.feature.trim();
     if (query.length === 0) {
-      throw ctx.fail('invalid_feature_input', 'The feature string is whitespace-only.', {
-        ...ctx.recoveryFor('invalid_feature_input'),
-      });
+      throw ctx.fail('invalid_feature_input', 'The feature string is whitespace-only.');
     }
 
     const resolution = await resolveFeature(query, {
@@ -183,8 +211,7 @@ export const browsercompatGetFeature = tool('browsercompat_get_feature', {
       });
     }
 
-    const leafDescription = leaf?.description ? stripTags(leaf.description) : undefined;
-    const description = feature?.description ?? leafDescription;
+    const description = feature?.description ?? leaf?.description;
 
     const discouraged = featureId === null ? undefined : baseline.discouraged(featureId);
     const status =
@@ -227,6 +254,18 @@ export const browsercompatGetFeature = tool('browsercompat_get_feature', {
           : [...leaf.spec_url];
 
     const compatKeys = resolution.compat_keys;
+    const children = key === null ? [] : bcd.directChildren(key);
+    const childKeys = children.slice(input.subkeys_offset, input.subkeys_offset + 100);
+    const nextOffset = input.subkeys_offset + childKeys.length;
+    const subkeys =
+      children.length === 0
+        ? undefined
+        : {
+            total: children.length,
+            keys: childKeys,
+            truncated: nextOffset < children.length,
+            ...(nextOffset < children.length ? { next_offset: nextOffset } : {}),
+          };
     const noCompatData = key === null && (compatKeys?.length ?? 0) === 0;
     const guidance = noCompatData
       ? `"${featureId ?? query}" is a tracked web-features entry with no browser-compat-data keys yet, so there is no per-browser support to report. Call browsercompat_check_baseline for its Baseline state.`
@@ -242,11 +281,13 @@ export const browsercompatGetFeature = tool('browsercompat_get_feature', {
       ...(description === undefined ? {} : { description }),
       ...(baselineInfo === undefined ? {} : { baseline: baselineInfo }),
       ...(status === undefined ? {} : { status }),
+      ...(discouraged === undefined ? {} : { discouraged }),
       ...(limiting === undefined ? {} : { limiting_browser: limiting }),
       ...(support === undefined ? {} : { support }),
       ...(leaf?.mdn_url === undefined ? {} : { mdn_url: leaf.mdn_url }),
       ...(specUrls === undefined ? {} : { spec_urls: specUrls }),
       ...(compatKeys === undefined ? {} : { compat_keys: compatKeys }),
+      ...(subkeys === undefined ? {} : { subkeys }),
       ...(guidance === undefined ? {} : { guidance }),
     };
   },
@@ -254,11 +295,11 @@ export const browsercompatGetFeature = tool('browsercompat_get_feature', {
   format: (result) => {
     const resolved = result.resolved_as;
     const heading = result.name ?? resolved?.bcd_key ?? resolved?.baseline_id ?? 'No match';
-    const lines = [`# ${heading}`];
+    const lines = [`# ${markdownText(heading)}`];
     lines.push(`**found:** ${result.found} · **outcome:** ${result.outcome}`);
     if (resolved) {
       lines.push(
-        `**Resolved:** "${resolved.input}" → bcd_key ${resolved.bcd_key ?? 'none'} · baseline_id ${resolved.baseline_id ?? 'none'} · via ${resolved.resolved_via}`,
+        `**Resolved:** "${markdownText(resolved.input)}" → bcd_key ${markdownText(resolved.bcd_key ?? 'none')} · baseline_id ${markdownText(resolved.baseline_id ?? 'none')} · via ${resolved.resolved_via}`,
       );
     }
     if (result.baseline) lines.push(formatBaselineLine(result.baseline));
@@ -266,11 +307,6 @@ export const browsercompatGetFeature = tool('browsercompat_get_feature', {
       lines.push(
         `**Status:** standard_track ${result.status.standard_track} · deprecated ${result.status.deprecated} · experimental ${result.status.experimental}`,
       );
-      if (result.status.discouraged) {
-        lines.push(
-          `**Discouraged:** ${result.status.discouraged.reason} (according_to ${result.status.discouraged.according_to.join(', ')})`,
-        );
-      }
     } else if (result.found) {
       lines.push(
         resolved?.bcd_key === null
@@ -278,12 +314,22 @@ export const browsercompatGetFeature = tool('browsercompat_get_feature', {
           : '**Status:** not recorded for this key.',
       );
     }
-    if (result.limiting_browser) {
+    const advisories = [result.discouraged, result.status?.discouraged].filter(
+      (value) => value !== undefined,
+    );
+    if (advisories.length > 0) {
+      const reasons = [...new Set(advisories.map((value) => value.reason))];
+      const sources = [...new Set(advisories.flatMap((value) => value.according_to))];
       lines.push(
-        `**Limiting browser:** ${result.limiting_browser.name} (${result.limiting_browser.browser_id}) ${result.limiting_browser.version}`,
+        `**Discouraged:** ${reasons.map(markdownText).join('; ')} (according_to ${sources.map(markdownText).join(', ')})`,
       );
     }
-    if (result.description) lines.push('', result.description);
+    if (result.limiting_browser) {
+      lines.push(
+        `**Limiting browser:** ${markdownText(result.limiting_browser.name)} (${markdownText(result.limiting_browser.browser_id)}) ${markdownText(result.limiting_browser.version)} — full support in every core browser`,
+      );
+    }
+    if (result.description) lines.push('', markdownText(result.description));
     if (result.support) {
       lines.push('', '## Support');
       for (const row of result.support) lines.push(...formatSupportRow(row));
@@ -291,12 +337,28 @@ export const browsercompatGetFeature = tool('browsercompat_get_feature', {
     if (result.compat_keys) {
       lines.push(
         '',
-        `**compat_keys:** ${result.compat_keys.length === 0 ? 'none — this entry owns no browser-compat-data keys' : result.compat_keys.join(', ')}`,
+        `**compat_keys:** ${result.compat_keys.length === 0 ? 'none — this entry owns no browser-compat-data keys' : result.compat_keys.map(markdownText).join(', ')}`,
       );
     }
-    if (result.mdn_url) lines.push('', `MDN: ${result.mdn_url}`);
-    if (result.spec_urls) lines.push(`Spec: ${result.spec_urls.join(' · ')}`);
-    if (result.guidance) lines.push('', result.guidance);
+    if (result.mdn_url) lines.push('', `MDN: ${markdownText(result.mdn_url)}`);
+    if (result.subkeys) {
+      lines.push(
+        '',
+        '## Direct subkeys',
+        `total: ${result.subkeys.total} · truncated: ${result.subkeys.truncated}`,
+      );
+      for (const child of result.subkeys.keys) lines.push(`- ${markdownText(child)}`);
+      if (result.subkeys.keys.length === 0) lines.push('No child keys on this page.');
+      if (result.subkeys.next_offset !== undefined)
+        lines.push(
+          `next_offset: ${result.subkeys.next_offset} — re-run with subkeys_offset: ${result.subkeys.next_offset}.`,
+        );
+      lines.push(
+        'Call browsercompat_get_feature with one child key, or browsercompat_check_baseline with up to 20 child keys.',
+      );
+    }
+    if (result.spec_urls) lines.push(`Spec: ${result.spec_urls.map(markdownText).join(' · ')}`);
+    if (result.guidance) lines.push('', markdownText(result.guidance));
     return [{ type: 'text', text: lines.join('\n') }];
   },
 });

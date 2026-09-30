@@ -1,5 +1,5 @@
 /**
- * @fileoverview Vitest config for the consumer server. Uses Vitest 4 `projects`
+ * @fileoverview Vitest config for the consumer server. Uses Vitest `projects`
  * so you can split suites (unit/smoke/integration/fuzz) and run each with
  * `--project <name>` as the surface grows. Extends the framework's base config
  * for shared `resolve`, `ssr`, and coverage settings.
@@ -16,7 +16,11 @@ export default mergeConfig(
   coreConfig,
   defineConfig({
     resolve: { alias },
+    // Parse dataset snapshots as JSON instead of transforming their nested objects.
+    json: { stringify: true, namedExports: false },
     test: {
+      // Each isolated fork loads the bundled datasets; bound concurrent copies.
+      maxWorkers: 2,
       projects: [
         {
           extends: true,
@@ -24,12 +28,8 @@ export default mergeConfig(
             name: 'unit',
             include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
             exclude: ['tests/smoke/**', 'tests/integration/**', 'tests/fuzz/**'],
-            // The first test in each file to touch a data service pays the
-            // cold load of all four bundled datasets (~100ms measured in
-            // isolation) — but every unit file does this independently
-            // (isolate: true forks a process per file), so a full-suite run
-            // has many forks parsing the 20MB BCD JSON at once. 45s absorbs
-            // that contention without masking a genuinely hung test.
+            // Isolated files each load and index the bundled snapshots;
+            // retain headroom for concurrent work on the development host.
             testTimeout: 45_000,
           },
         },

@@ -11,6 +11,7 @@ import type {
   CompatStatement,
   SimpleSupportStatement,
 } from '@mdn/browser-compat-data/types';
+import { normalizeBcdText } from './bcd-text.js';
 import type {
   ReleaseEntry,
   SupportDetail,
@@ -22,15 +23,6 @@ import type {
 
 /** Release statuses that have actually shipped, as opposed to beta/nightly/planned. */
 const SHIPPED_STATUSES = new Set(['current', 'esr', 'retired']);
-
-/** Verdicts that carry a version a limiting-browser comparison can rank. */
-const LIMITING_VERDICTS = new Set<SupportVerdict>([
-  'supported',
-  'partial',
-  'prefixed',
-  'flagged',
-  'preview_only',
-]);
 
 /** Prefix BCD uses on `__compat.tags` entries that name a web-features id. */
 const WEB_FEATURES_TAG_PREFIX = 'web-features:';
@@ -67,6 +59,23 @@ function compareTuples(a: number[], b: number[]): number {
 function toStringArray(value: string | readonly string[] | undefined): string[] | undefined {
   if (value === undefined) return undefined;
   return typeof value === 'string' ? [value] : [...value];
+}
+
+/** Normalize each statement's notes once, preserving BCD's string-or-tuple shape. */
+function normalizeStatement(statement: SimpleSupportStatement): SimpleSupportStatement {
+  if (statement.notes === undefined) return statement;
+  const notes = statement.notes;
+  return {
+    ...statement,
+    notes:
+      typeof notes === 'string'
+        ? normalizeBcdText(notes)
+        : [
+            normalizeBcdText(notes[0]),
+            normalizeBcdText(notes[1]),
+            ...notes.slice(2).map(normalizeBcdText),
+          ],
+  };
 }
 
 /** Rank a statement by its qualifiers — lower is cleaner. */
@@ -107,6 +116,7 @@ export class BcdService {
   readonly runtimeBrowserIds: readonly string[];
 
   private readonly leaves: Map<string, CompatStatement>;
+  private readonly children = new Map<string, string[]>();
   private readonly namespaceCounts: Map<string, number>;
   private readonly namespaceExamples: Map<string, string>;
   private readonly releasesByBrowser: Map<string, ReleaseEntry[]>;
@@ -162,7 +172,23 @@ export class BcdService {
   private collectLeaves(node: Record<string, unknown>, path: string): void {
     for (const [key, value] of Object.entries(node)) {
       if (key === '__compat') {
-        this.leaves.set(path, value as CompatStatement);
+        const leaf = value as CompatStatement;
+        this.leaves.set(path, {
+          ...leaf,
+          ...(leaf.description === undefined
+            ? {}
+            : { description: normalizeBcdText(leaf.description) }),
+          support: Object.fromEntries(
+            Object.entries(leaf.support).map(([browser, entry]) => [
+              browser,
+              Array.isArray(entry) ? entry.map(normalizeStatement) : normalizeStatement(entry),
+            ]),
+          ),
+        });
+        const parent = path.slice(0, path.lastIndexOf('.'));
+        const children = this.children.get(parent);
+        if (children) children.push(path);
+        else this.children.set(parent, [path]);
         const namespace = path.slice(0, path.indexOf('.')) || path;
         this.namespaceCounts.set(namespace, (this.namespaceCounts.get(namespace) ?? 0) + 1);
         if (!this.namespaceExamples.has(namespace)) this.namespaceExamples.set(namespace, path);
@@ -177,6 +203,11 @@ export class BcdService {
   /** The compat leaf at a dotted BCD key, or `undefined` when the key is not a leaf. */
   leaf(key: string): CompatStatement | undefined {
     return this.leaves.get(key);
+  }
+
+  /** Direct callable children in BCD traversal order; structural nodes and grandchildren are excluded. */
+  directChildren(key: string): readonly string[] {
+    return this.children.get(key) ?? [];
   }
 
   /** Every leaf keyed by its dotted BCD path, in namespace-walk order. */
@@ -378,8 +409,23 @@ export class BcdService {
     }
 
     if (sawUnknown) return { verdict: 'unknown', detail: {} };
-    if (sawPreview && appliedCount === 0) return { verdict: 'preview_only', detail: {} };
-    return { verdict: 'unsupported', detail: {} };
+    const preview = sawPreview && appliedCount === 0;
+    const matching = statements.filter(
+      (statement) => statement.version_added === (preview ? 'preview' : false),
+    );
+    const notes = [
+      ...new Set(matching.flatMap((statement) => toStringArray(statement.notes) ?? [])),
+    ];
+    const urls = [
+      ...new Set(matching.flatMap((statement) => toStringArray(statement.impl_url) ?? [])),
+    ];
+    return {
+      verdict: preview ? 'preview_only' : 'unsupported',
+      detail: {
+        ...(notes.length === 0 ? {} : { notes }),
+        ...(urls.length === 0 ? {} : { impl_url: urls }),
+      },
+    };
   }
 
   /**
@@ -401,7 +447,7 @@ export class BcdService {
 
   /**
    * The Baseline core browser requiring the newest release, by release date.
-   * Undefined until every core browser has shipped a resolvable version, since
+   * Undefined until every core browser has full support at a resolvable version, since
    * "the newest version required" has no answer while one browser has none.
    */
   limitingBrowser(
@@ -414,7 +460,7 @@ export class BcdService {
       const latest = this.latestShippedRelease(id);
       if (!latest) return undefined;
       const evaluation = this.supportAt(leaf, id, latest.index);
-      if (!LIMITING_VERDICTS.has(evaluation.verdict)) return undefined;
+      if (evaluation.verdict !== 'supported') return undefined;
       const version = evaluation.detail.version_added;
       if (version === undefined) return undefined;
       const date = this.releaseDate(id, version) ?? '';

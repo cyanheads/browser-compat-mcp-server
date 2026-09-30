@@ -6,17 +6,25 @@
  */
 
 import { McpError } from '@cyanheads/mcp-ts-core/errors';
-import { createMockContext } from '@cyanheads/mcp-ts-core/testing';
 import { describe, expect, it } from 'vitest';
-import { browsercompatCompareSupport } from '@/mcp-server/tools/definitions/browsercompat-compare-support.tool.js';
 import { CANIUSE_ATTRIBUTION, getTargetsService } from '@/services/targets/targets-service.js';
 
 describe('CANIUSE_ATTRIBUTION', () => {
   it('is the exact CC BY 4.0 attribution string used verbatim on every response (D20)', () => {
     expect(CANIUSE_ATTRIBUTION).toBe(
       'Usage data from caniuse.com, © Can I Use contributors, CC BY 4.0. ' +
-        'Figures are a share of the ~96.7% of global traffic caniuse tracks.',
+        'Figures are a share of the ~97.3% of global traffic caniuse tracks.',
     );
+  });
+
+  it('states the share of global traffic the bundled caniuse-lite data sums to, to one decimal', async () => {
+    const { agents } = await import('caniuse-lite');
+    const tracked = Object.values(agents).reduce(
+      (sum, agent) =>
+        sum + Object.values(agent?.usage_global ?? {}).reduce((total, usage) => total + usage, 0),
+      0,
+    );
+    expect(CANIUSE_ATTRIBUTION).toContain(`~${tracked.toFixed(1)}% of global traffic`);
   });
 });
 
@@ -26,15 +34,15 @@ describe('TargetsService#agentIds / agentUsageTotal', () => {
     expect(targets.agentIds()).toHaveLength(19);
   });
 
-  it('reports per-agent usage totals matching the verified design figures', async () => {
+  it('reports per-agent usage totals matching the bundled snapshot', async () => {
     const targets = await getTargetsService();
-    expect(targets.agentUsageTotal('ie')).toBeCloseTo(0.266, 2);
-    expect(targets.agentUsageTotal('edge')).toBeCloseTo(5.088, 2);
-    expect(targets.agentUsageTotal('firefox')).toBeCloseTo(2.893, 2);
-    expect(targets.agentUsageTotal('chrome')).toBeCloseTo(22.17, 1);
-    expect(targets.agentUsageTotal('safari')).toBeCloseTo(2.47, 2);
-    expect(targets.agentUsageTotal('opera')).toBeCloseTo(0.248, 2);
-    expect(targets.agentUsageTotal('ios_saf')).toBeCloseTo(13.728, 2);
+    expect(targets.agentUsageTotal('ie')).toBeCloseTo(0.2358, 3);
+    expect(targets.agentUsageTotal('edge')).toBeCloseTo(5.1193, 3);
+    expect(targets.agentUsageTotal('firefox')).toBeCloseTo(2.5056, 3);
+    expect(targets.agentUsageTotal('chrome')).toBeCloseTo(25.4149, 3);
+    expect(targets.agentUsageTotal('safari')).toBeCloseTo(2.4712, 3);
+    expect(targets.agentUsageTotal('opera')).toBeCloseTo(0.8942, 3);
+    expect(targets.agentUsageTotal('ios_saf')).toBeCloseTo(13.2051, 3);
   });
 
   it('is memoized — the same call twice returns the identical rounded value', async () => {
@@ -59,16 +67,14 @@ describe('TargetsService#caniuseFeature / caniuseTitle', () => {
 describe('TargetsService#queryTokens', () => {
   it('runs a browserslist query with config discovery disabled (D22)', async () => {
     const targets = await getTargetsService();
-    const ctx = createMockContext({ errors: browsercompatCompareSupport.errors });
-    const tokens = targets.queryTokens('chrome 100', ctx);
+    const tokens = targets.queryTokens('chrome 100');
     expect(tokens).toEqual(['chrome 100']);
   });
 
   it('wraps a rejected query as invalid_target_query, forwarding the browserslist message verbatim', async () => {
     const targets = await getTargetsService();
-    const ctx = createMockContext({ errors: browsercompatCompareSupport.errors });
     try {
-      targets.queryTokens('Xyz 1', ctx);
+      targets.queryTokens('Xyz 1');
       throw new Error('expected queryTokens to throw');
     } catch (error) {
       expect(error).toBeInstanceOf(McpError);
@@ -82,16 +88,14 @@ describe('TargetsService#queryTokens', () => {
 
   it('a negation-only query without a base is rejected the same way', async () => {
     const targets = await getTargetsService();
-    const ctx = createMockContext({ errors: browsercompatCompareSupport.errors });
-    expect(() => targets.queryTokens('not dead', ctx)).toThrow(McpError);
+    expect(() => targets.queryTokens('not dead')).toThrow(McpError);
   });
 
   it('a non-browserslist error propagates unwrapped', async () => {
     const targets = await getTargetsService();
-    const ctx = createMockContext({ errors: browsercompatCompareSupport.errors });
     // An empty query string is not a BrowserslistError — confirm the
     // isBrowserslistError guard does not swallow arbitrary throws.
-    expect(() => targets.queryTokens('', ctx)).not.toThrow(McpError);
+    expect(() => targets.queryTokens('')).not.toThrow(McpError);
   });
 });
 
@@ -103,7 +107,7 @@ describe('TargetsService#coverage', () => {
 
   it('reports real caniuse-derived coverage for a known token', async () => {
     const targets = await getTargetsService();
-    expect(targets.coverage(['ie 11'])).toBeCloseTo(0.2663, 3);
+    expect(targets.coverage(['ie 11'])).toBeCloseTo(0.2358, 3);
   });
 });
 
@@ -169,8 +173,8 @@ describe('TargetsService#excludedUsage', () => {
     expect(targets.excludedUsage(['not-a-real-caniuse-id'])).toBeUndefined();
   });
 
-  it('computes the real excluded share for css-has (2.6222%)', async () => {
+  it('computes the real excluded share for css-has (2.4496%)', async () => {
     const targets = await getTargetsService();
-    expect(targets.excludedUsage(['css-has'])).toBeCloseTo(2.6222, 3);
+    expect(targets.excludedUsage(['css-has'])).toBeCloseTo(2.4496, 3);
   });
 });

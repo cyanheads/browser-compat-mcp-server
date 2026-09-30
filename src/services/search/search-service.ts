@@ -12,6 +12,8 @@ import { getBcdService } from '@/services/bcd/bcd-service.js';
 import { getTargetsService } from '@/services/targets/targets-service.js';
 import type { IndexRow, MatchedOn, SearchFilters, SearchHit } from './types.js';
 
+export { normalizeBcdText as stripTags } from '@/services/bcd/bcd-text.js';
+
 /** Namespace ordering used as a within-tier tiebreak. */
 const NAMESPACE_PRIORITY = [
   'api',
@@ -36,34 +38,11 @@ const BASELINE_PRIORITY: Record<BaselineState, number> = {
   not_mapped: 3,
 };
 
-/** The five XML entities BCD descriptions use, plus the numeric apostrophe. */
-const HTML_ENTITIES: Record<string, string> = {
-  '&lt;': '<',
-  '&gt;': '>',
-  '&quot;': '"',
-  '&apos;': "'",
-  '&#39;': "'",
-  '&nbsp;': ' ',
-  '&amp;': '&',
-};
-
-/**
- * Reduce a BCD description to prose: drop the markup and decode the entities it
- * escapes, so `&lt;container-query&gt;` reads as the token an agent recognizes.
- */
-export function stripTags(value: string): string {
-  return value
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/&(?:lt|gt|quot|apos|#39|nbsp|amp);/g, (entity) => HTML_ENTITIES[entity] ?? entity)
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 /**
  * Normalize text for both the index and the query: split camelCase, lowercase,
  * drop punctuation except `-` (`<` and `>` included, so `<dialog>` keeps
  * `dialog`), then split on whitespace and dots. Markup is stripped only from
- * BCD descriptions, by `stripTags`, before they reach this function.
+ * BCD descriptions during BCD ingestion, before they reach this function.
  */
 export function tokenize(value: string): string[] {
   const camelSplit = value.replace(/([a-z0-9])([A-Z])/g, '$1 $2');
@@ -279,8 +258,7 @@ async function loadSearchService(): Promise<SearchService> {
     const owner = baseline.keyOwner(key);
     const featureId = owner?.featureId ?? bcd.webFeatureTags(leaf)[0];
     const feature = featureId === undefined ? undefined : baseline.feature(featureId);
-    const description =
-      feature?.description ?? (leaf.description ? stripTags(leaf.description) : undefined);
+    const description = feature?.description ?? leaf.description;
     const caniuseTitle = titleFor(featureId);
     const segments = key.split('.');
     rows.push({

@@ -68,7 +68,7 @@ describe('formatSupportRow', () => {
       '  - alternative_name: MozBattery',
       '  - flags: preference dom.battery value_to_set true',
       '  - notes: Note one | Note two',
-      '  - impl_url: https://bugzil.la/1 https://bugzil.la/2',
+      '  - impl_url: <https://bugzil.la/1> <https://bugzil.la/2>',
     ]);
   });
 

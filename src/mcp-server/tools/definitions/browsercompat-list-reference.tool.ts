@@ -16,6 +16,7 @@ import {
   renderDataVersion,
 } from '@/services/data-version/data-version-service.js';
 import { CANIUSE_ATTRIBUTION, getTargetsService } from '@/services/targets/targets-service.js';
+import { markdownText } from '@/utils/markdown-text.js';
 
 /** Short human labels for the BCD namespaces, which carry no display name in the data. */
 const NAMESPACE_LABELS: Record<string, string> = {
@@ -143,7 +144,7 @@ export const browsercompatListReference = tool('browsercompat_list_reference', {
 
   enrichmentTrailer: {
     data_version: { render: renderDataVersion },
-    attribution: { label: 'Usage data' },
+    attribution: { render: (value) => `**Usage data:** ${markdownText(value ?? '')}` },
   },
 
   async handler(input, ctx) {
@@ -253,16 +254,16 @@ export const browsercompatListReference = tool('browsercompat_list_reference', {
   },
 
   format: (result) => {
-    const lines = [`# ${result.topic} — ${result.entries.length} entries`, ''];
+    const lines = [`# ${markdownText(result.topic)} — ${result.entries.length} entries`, ''];
     for (const entry of result.entries) {
-      lines.push(`## ${entry.id} — ${entry.label}`);
-      lines.push(entry.detail);
+      lines.push(`## ${markdownText(entry.id)} — ${markdownText(entry.label)}`);
+      lines.push(markdownText(entry.detail));
       if (entry.count !== undefined) lines.push(`- count: ${entry.count}`);
       if (entry.reported !== undefined) {
         lines.push(`- reported: ${entry.reported ? 'yes, reported browser' : 'no, runtime only'}`);
       }
       if (entry.bcd_browser !== undefined) {
-        lines.push(`- bcd_browser: ${entry.bcd_browser ?? 'none'}`);
+        lines.push(`- bcd_browser: ${markdownText(entry.bcd_browser ?? 'none')}`);
       }
       if (entry.usage_percent !== undefined) {
         lines.push(`- usage_percent: ${entry.usage_percent}% of tracked traffic`);
@@ -270,7 +271,7 @@ export const browsercompatListReference = tool('browsercompat_list_reference', {
       if (entry.maps_from !== undefined) {
         lines.push(`- maps_from: ${String(entry.maps_from)}`);
       }
-      if (entry.spec_url !== undefined) lines.push(`- spec_url: ${entry.spec_url}`);
+      if (entry.spec_url !== undefined) lines.push(`- spec_url: ${markdownText(entry.spec_url)}`);
       lines.push('');
     }
     return [{ type: 'text', text: lines.join('\n').trimEnd() }];

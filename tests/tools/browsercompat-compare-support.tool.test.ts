@@ -1,7 +1,8 @@
 /**
  * @fileoverview Tests for browsercompat_compare_support — the design's worked
- * `defaults` example (3 features, 1 clears), unchecked_targets reasons,
- * ambiguous/inconclusive/miss verdicts, error paths, and format() rendering.
+ * `defaults` example (3 features, none clears), unchecked_targets reasons,
+ * ambiguous/inconclusive/miss verdicts, target paging, error paths, and
+ * format() rendering.
  * @module tests/tools/browsercompat-compare-support.tool.test
  */
 
@@ -10,10 +11,27 @@ import { createMockContext, getEnrichment } from '@cyanheads/mcp-ts-core/testing
 import { describe, expect, it } from 'vitest';
 import { browsercompatCompareSupport } from '@/mcp-server/tools/definitions/browsercompat-compare-support.tool.js';
 
-async function run(features: string[], targets: string, resolve = false) {
+async function run(
+  features: string[],
+  targets: string,
+  resolve = false,
+  page: { target_offset?: number; target_limit?: number } = {},
+) {
   const ctx = createMockContext({ errors: browsercompatCompareSupport.errors });
-  const input = browsercompatCompareSupport.input.parse({ features, targets, resolve });
+  const input = browsercompatCompareSupport.input.parse({ features, targets, resolve, ...page });
   return { ctx, result: await browsercompatCompareSupport.handler(input, ctx) };
+}
+
+/** Every page of a query at the default page size, following `nextOffset`. */
+async function runAllPages(features: string[], targets: string) {
+  const pages: Awaited<ReturnType<typeof run>>['result'][] = [];
+  let offset: number | undefined = 0;
+  while (offset !== undefined) {
+    const { ctx, result } = await run(features, targets, false, { target_offset: offset });
+    pages.push(result);
+    offset = getEnrichment(ctx).nextOffset as number | undefined;
+  }
+  return pages;
 }
 
 describe('browsercompat_compare_support — worked example: defaults', () => {
@@ -23,33 +41,55 @@ describe('browsercompat_compare_support — worked example: defaults', () => {
     'css.properties.anchor-name',
   ];
 
-  it('resolves 27 of 32 defaults tokens, with the 5 unmapped agents in unchecked_targets', async () => {
-    const { result } = await run(FEATURES, 'defaults');
-    expect(result.query_echo).toBe('defaults');
-    expect(result.targets_resolved).toHaveLength(27);
-    expect(result.unchecked_targets).toHaveLength(5);
-    expect(result.unchecked_targets.map((t) => t.agent).sort()).toEqual(
+  it('maps 30 of 35 defaults tokens, with the 5 unmapped tokens in unchecked_targets', async () => {
+    const pages = await runAllPages(FEATURES, 'defaults');
+    expect(pages).toHaveLength(4);
+    for (const page of pages) {
+      expect(page).toMatchObject({
+        query_echo: 'defaults',
+        comparable_features: 3,
+        targets_resolved_total: 30,
+        evaluated_targets_total: 30,
+        unchecked_targets_total: 5,
+      });
+    }
+    const mapped = pages.flatMap((page) => page.targets_resolved);
+    const unchecked = pages.flatMap((page) => page.unchecked_targets);
+    expect(mapped).toHaveLength(30);
+    expect(mapped.every((t) => t.evaluated)).toBe(true);
+    expect(unchecked.map((t) => t.agent).sort()).toEqual(
       ['and_qq', 'and_uc', 'kaios', 'kaios', 'op_mini'].sort(),
     );
-    expect(result.unchecked_targets.every((t) => t.reason === 'no_bcd_browser')).toBe(true);
+    expect(unchecked.every((t) => t.reason === 'no_bcd_browser')).toBe(true);
+    // The first page covers ten query tokens: eight mapped, two unmapped.
+    expect(pages[0]?.targets_resolved).toHaveLength(8);
+    expect(pages[0]?.unchecked_targets.map((t) => t.agent)).toEqual(['and_qq', 'and_uc']);
   });
 
   it('reports coverage figures matching the real caniuse-derived percentages', async () => {
     const { result } = await run(FEATURES, 'defaults');
-    expect(result.target_coverage_percent).toBeCloseTo(83.8794, 3);
-    expect(result.unchecked_coverage_percent).toBeCloseTo(0.7842, 3);
+    expect(result.target_coverage_percent).toBeCloseTo(84.1977, 3);
+    expect(result.unchecked_coverage_percent).toBeCloseTo(0.7324, 3);
   });
 
-  it('1 of 3 features clears — css.selectors.has clears, the other two fail', async () => {
+  it('0 of 3 features clears — css.selectors.has is inconclusive over the 5 unmapped tokens, the other two fail', async () => {
     const { result } = await run(FEATURES, 'defaults');
-    expect(result.results.map((r) => r.verdict)).toEqual(['clears', 'fails', 'fails']);
+    expect(result.results.map((r) => r.verdict)).toEqual(['inconclusive', 'fails', 'fails']);
+    expect(result.results[0]).toMatchObject({
+      failing_total: 0,
+      evaluated_total: 30,
+      evaluated_coverage_percent: 84.1977,
+      unchecked_total: 5,
+      unchecked_coverage_percent: 0.7324,
+    });
     expect(result.all_clear).toBe(false);
   });
 
   it('Array.fromAsync fails exactly on chrome 120, chrome 109, op_mob 80 (unsupported)', async () => {
-    const { result } = await run(FEATURES, 'defaults');
-    const fromAsync = result.results[1];
-    expect(fromAsync?.failing_targets).toEqual([
+    const pages = await runAllPages(FEATURES, 'defaults');
+    expect(pages.map((page) => page.results[1]?.failing_total)).toEqual([3, 3, 3, 3]);
+    expect(pages.map((page) => page.results[1]?.failing_targets.length)).toEqual([0, 2, 1, 0]);
+    expect(pages.flatMap((page) => page.results[1]?.failing_targets ?? [])).toEqual([
       {
         agent: 'chrome',
         version_token: '120',
@@ -75,21 +115,23 @@ describe('browsercompat_compare_support — worked example: defaults', () => {
   });
 
   it('anchor-name additionally fails on firefox 140 and ios_saf 18.5-18.7', async () => {
-    const { result } = await run(FEATURES, 'defaults');
-    const anchorName = result.results[2];
-    expect(anchorName?.failing_targets.map((t) => `${t.agent} ${t.version_token}`)).toEqual([
+    const pages = await runAllPages(FEATURES, 'defaults');
+    const failing = pages.flatMap((page) => page.results[2]?.failing_targets ?? []);
+    expect(failing.map((t) => `${t.agent} ${t.version_token}`)).toEqual([
       'chrome 120',
       'chrome 109',
       'firefox 140',
       'ios_saf 18.5-18.7',
       'op_mob 80',
     ]);
-    expect(anchorName?.failing_targets.every((t) => t.verdict === 'unsupported')).toBe(true);
+    expect(failing.every((t) => t.verdict === 'unsupported')).toBe(true);
+    expect(pages[0]?.results[2]).toMatchObject({ verdict: 'fails', failing_total: 5 });
   });
 
-  it('conforms to the declared output schema', async () => {
-    const { result } = await run(FEATURES, 'defaults');
-    expect(result).toEqual(expect.schemaMatching(browsercompatCompareSupport.output));
+  it('conforms to the declared output schema on every page', async () => {
+    for (const page of await runAllPages(FEATURES, 'defaults')) {
+      expect(page).toEqual(expect.schemaMatching(browsercompatCompareSupport.output));
+    }
   });
 });
 
@@ -191,7 +233,7 @@ describe('browsercompat_compare_support — resolve: true', () => {
   });
 
   it('a multi-key feature name is ambiguous with compat_keys, not a miss', async () => {
-    const { result } = await run(['Container queries'], 'chrome 120', true);
+    const { result } = await run(['Container queries (size)'], 'chrome 120', true);
     expect(result.results[0]).toMatchObject({
       found: true,
       verdict: 'ambiguous',
@@ -331,18 +373,54 @@ describe('browsercompat_compare_support — errors', () => {
 });
 
 describe('browsercompat_compare_support — enrichment', () => {
-  it('always echoes data_version, attribution, and totalCount', async () => {
-    const { ctx } = await run(['has'], 'chrome 120');
-    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.2' });
+  it('always echoes data_version, attribution, and the page arithmetic, with totalCount counting query targets', async () => {
+    const { ctx } = await run(['has', 'grid', 'nope-xyz'], 'chrome 120, chrome 109');
+    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.3' });
     expect(getEnrichment(ctx).attribution).toMatch(/caniuse\.com/);
-    expect(getEnrichment(ctx).totalCount).toBe(1);
+    expect(getEnrichment(ctx)).toMatchObject({
+      totalCount: 2,
+      shown: 2,
+      cap: 10,
+      truncated: false,
+    });
+    expect(getEnrichment(ctx).nextOffset).toBeUndefined();
+    expect(getEnrichment(ctx).offsetNotice).toBeUndefined();
+  });
+
+  it('a page short of the query carries truncated and the next offset', async () => {
+    const { ctx, result } = await run(['has'], 'defaults', false, {
+      target_offset: 30,
+      target_limit: 3,
+    });
+    expect(getEnrichment(ctx)).toMatchObject({
+      totalCount: 35,
+      shown: 3,
+      cap: 3,
+      truncated: true,
+      nextOffset: 33,
+    });
+    expect(result.targets_resolved.map((t) => `${t.agent} ${t.version_token}`)).toEqual([
+      'safari 27',
+      'safari 26.6',
+      'safari 26.5',
+    ]);
+  });
+
+  it('an offset past the end sets offsetNotice and no continuation', async () => {
+    const { ctx, result } = await run(['has'], 'defaults', false, { target_offset: 35 });
+    expect(getEnrichment(ctx)).toMatchObject({ totalCount: 35, shown: 0, truncated: false });
+    expect(getEnrichment(ctx).nextOffset).toBeUndefined();
+    expect(getEnrichment(ctx).offsetNotice).toContain('target_offset below 35');
+    expect(result.targets_resolved).toEqual([]);
+    expect(result.results[0]).toMatchObject({ verdict: 'inconclusive', evaluated_total: 30 });
   });
 
   it('uncheckedNotice names the agents and combined usage share when targets go unchecked', async () => {
     const { ctx } = await run(['has'], 'defaults');
     const notice = getEnrichment(ctx).uncheckedNotice as string | undefined;
-    expect(notice).toContain('5 target versions');
-    expect(notice).toMatch(/op_mini|and_qq|and_uc|kaios/);
+    expect(notice).toContain('5 of 35 target versions were not evaluated');
+    expect(notice).toContain('(and_qq, and_uc, kaios, op_mini)');
+    expect(notice).toContain('0.7324% of tracked traffic');
   });
 
   it('uncheckedNotice is absent when every target resolves cleanly', async () => {
@@ -359,20 +437,31 @@ describe('browsercompat_compare_support — format()', () => {
     );
     const blocks = browsercompatCompareSupport.format?.(result);
     const text = (blocks?.[0] as { text: string } | undefined)?.text;
-    expect(text).toContain('# 1 of 3 features clears `defaults`');
+    expect(text).toContain('# 0 of 3 features clears `defaults`');
+    expect(text).toContain(
+      'Evaluated for every compared feature: 30 of 35 target versions (84.1977% of tracked traffic) · not evaluated: 5 (0.7324%)',
+    );
+    expect(text).toContain(
+      'Compared 3 of 3 features · 30 of 35 target versions map to a browser-compat-data release',
+    );
     expect(text).toContain('**all_clear:** false');
-    expect(text).toContain('**clears**');
+    expect(text).toContain('**inconclusive**');
     expect(text).toContain('**fails**');
-    expect(text).toContain('## Targets evaluated');
-    expect(text).toContain('## Not evaluated');
+    expect(text).toContain('## Targets mapped to a release — 8 of 30 on this page');
+    expect(text).toContain('## Not evaluated for every compared feature — 2 of 5 on this page');
     expect(text).toContain('no_bcd_browser');
+    expect(text).not.toContain('## Targets evaluated');
   });
 
-  it('renders "every resolved target was evaluated" when nothing is unchecked', async () => {
+  it('renders a clean sweep with every target evaluated and nothing unchecked', async () => {
     const { result } = await run(['has'], 'chrome 120');
     const blocks = browsercompatCompareSupport.format?.(result);
     const text = (blocks?.[0] as { text: string } | undefined)?.text;
-    expect(text).toContain('Every resolved target was evaluated.');
+    expect(text).toContain('# 1 of 1 features clears `chrome 120`');
+    expect(text).toContain(
+      '  - evaluated on 1 of 1 target versions (0.5159% of tracked traffic) · failing 0 · not evaluated 0 (0%)',
+    );
+    expect(text).toContain('Every target version was evaluated for every compared feature.');
   });
 
   it('renders the no-target-evaluated case with the per-token reason, not an empty table', async () => {
@@ -381,8 +470,9 @@ describe('browsercompat_compare_support — format()', () => {
     const text = (blocks?.[0] as { text: string } | undefined)?.text;
     expect(text).toContain('# 0 of 1 features clears `safari TP`');
     expect(text).toContain('**inconclusive**');
-    expect(text).toContain('## Targets evaluated');
-    expect(text).toContain('No target version was evaluated.');
+    expect(text).toContain('## Targets mapped to a release — 0 of 0 on this page');
+    expect(text).toContain('No target version maps to a browser-compat-data release.');
+    expect(text).toContain('Evaluated for every compared feature: 0 of 1 target versions');
     expect(text).toContain('| safari TP | unknown_version |');
   });
 

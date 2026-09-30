@@ -32,6 +32,59 @@ const REGISTERED_TOOLS = [
 ];
 
 describe('tools/list surface', () => {
+  it('advertises direct-child paging with a default zero offset and rejects invalid offsets', () => {
+    expect(browsercompatGetFeature.input.parse({ feature: 'api.Element' }).subkeys_offset).toBe(0);
+    expect(
+      browsercompatGetFeature.input.safeParse({ feature: 'api.Element', subkeys_offset: -1 })
+        .success,
+    ).toBe(false);
+    expect(browsercompatGetFeature.output.shape.subkeys).toBeDefined();
+    expect(browsercompatGetFeature.output.shape.discouraged).toBeDefined();
+  });
+
+  it('advertises target paging with a zero offset and a ten-target page, and rejects values outside the bounds', () => {
+    const base = { features: ['has'], targets: 'defaults' };
+    expect(browsercompatCompareSupport.input.parse(base)).toMatchObject({
+      target_offset: 0,
+      target_limit: 10,
+    });
+    expect(
+      browsercompatCompareSupport.input.parse({ ...base, target_offset: 30, target_limit: 1 }),
+    ).toMatchObject({ target_offset: 30, target_limit: 1 });
+    for (const paging of [
+      { target_offset: -1 },
+      { target_offset: 0.5 },
+      { target_offset: '10' },
+      { target_limit: 0 },
+      { target_limit: 11 },
+      { target_limit: 2.5 },
+    ]) {
+      expect(browsercompatCompareSupport.input.safeParse({ ...base, ...paging }).success).toBe(
+        false,
+      );
+    }
+    for (const field of [
+      'comparable_features',
+      'targets_resolved_total',
+      'evaluated_targets_total',
+      'unchecked_targets_total',
+    ] as const) {
+      expect(browsercompatCompareSupport.output.shape[field]).toBeDefined();
+    }
+    expect(Object.keys(browsercompatCompareSupport.enrichment ?? {}).sort()).toEqual(
+      [
+        'attribution',
+        'cap',
+        'data_version',
+        'nextOffset',
+        'offsetNotice',
+        'shown',
+        'totalCount',
+        'truncated',
+        'uncheckedNotice',
+      ].sort(),
+    );
+  });
   it('exposes exactly the five browsercompat_* tools', () => {
     expect(REGISTERED_TOOLS).toHaveLength(5);
     expect(REGISTERED_TOOLS.map((tool) => tool.name).sort()).toEqual([

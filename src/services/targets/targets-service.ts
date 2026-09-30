@@ -6,7 +6,6 @@
  * @module services/targets/targets-service
  */
 
-import type { Context } from '@cyanheads/mcp-ts-core';
 import { validationError } from '@cyanheads/mcp-ts-core/errors';
 import type { CaniuseAgent, CaniuseFeature } from 'caniuse-lite';
 import { bcdBrowserForAgent } from '@/data/browserslist-bcd-map.js';
@@ -14,14 +13,19 @@ import { getBcdService } from '@/services/bcd/bcd-service.js';
 import type { ResolvedTarget, TargetResolution, UncheckedTarget } from './types.js';
 
 /**
- * CC BY 4.0 attribution carried on every response that quotes a usage figure,
- * used verbatim. caniuse tracks roughly 96.7% of global traffic, so every
- * percentage here is a share of that tracked population rather than of all
- * traffic.
+ * Share of global traffic caniuse tracks: `usage_global` summed across every
+ * agent of the bundled caniuse-lite, to one decimal. The tests pin it to the
+ * bundled data, so a caniuse-lite bump that moves the figure fails until this
+ * is updated.
  */
-export const CANIUSE_ATTRIBUTION =
-  'Usage data from caniuse.com, © Can I Use contributors, CC BY 4.0. ' +
-  'Figures are a share of the ~96.7% of global traffic caniuse tracks.';
+export const CANIUSE_TRACKED_PERCENT = 97.3;
+
+/**
+ * CC BY 4.0 attribution carried on every response that quotes a usage figure,
+ * used verbatim. Every percentage here is a share of the traffic caniuse tracks
+ * rather than of all traffic.
+ */
+export const CANIUSE_ATTRIBUTION = `Usage data from caniuse.com, © Can I Use contributors, CC BY 4.0. Figures are a share of the ~${CANIUSE_TRACKED_PERCENT}% of global traffic caniuse tracks.`;
 
 /** Round a percentage to a stable precision so repeated calls agree byte for byte. */
 function percent(value: number): number {
@@ -95,16 +99,12 @@ export class TargetsService {
    * Run a browserslist query with config discovery disabled, so the result
    * depends on the query alone and never on the process working directory.
    */
-  queryTokens(query: string, ctx: Context): string[] {
+  queryTokens(query: string): string[] {
     try {
       return this.browserslist(query, { path: false });
     } catch (error) {
       if (!isBrowserslistError(error)) throw error;
-      throw validationError(
-        error.message,
-        { reason: 'invalid_target_query', ...ctx.recoveryFor('invalid_target_query') },
-        { cause: error },
-      );
+      throw validationError(error.message, { reason: 'invalid_target_query' }, { cause: error });
     }
   }
 
