@@ -1,6 +1,6 @@
 # browser-compat-mcp-server - Directory Structure
 
-Generated on: 2026-09-30 11:38:58
+Generated on: 2026-10-15 18:35:22
 
 ```text
 browser-compat-mcp-server/
@@ -131,6 +131,7 @@ browser-compat-mcp-server/
 │   ├── lint-mcp.ts
 │   ├── lint-packaging.ts
 │   ├── list-skills.ts
+│   ├── prune-musl-packages.ts
 │   ├── release-github.ts
 │   └── tree.ts
 ├── src/
