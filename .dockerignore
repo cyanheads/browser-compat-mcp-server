@@ -164,8 +164,9 @@ coverage/
 # =============================================================================
 # ENVIRONMENT & CONFIGURATION
 # =============================================================================
-.env
-.env.*
+.env*
+.mcpregistry_github_token
+.mcpregistry_registry_token
 .sample-env
 sample.*
 !sample.template.*
