@@ -148,6 +148,137 @@ describe('#11 unavailable metadata', () => {
   });
 });
 
+describe('#27 other_statements beside a support row', () => {
+  /** supportRows reads each browser at its newest shipped release: '2', index 1. */
+  const row = (entry: SupportStatement) => service.supportRows(leaf(entry), ['firefox'])[0];
+
+  it('lists every statement but the cleanest covering one, in declaration order, with notes and links', () => {
+    expect(
+      row([
+        { version_added: '1', flags: [{ type: 'preference', name: 'flag' }], notes: 'flagged' },
+        { version_added: '1', prefix: 'moz', notes: 'prefixed' },
+        { version_added: '1', partial_implementation: true, impl_url: 'https://example.test/p' },
+        { version_added: '2', notes: 'clean' },
+      ]),
+    ).toEqual({
+      browser_id: 'firefox',
+      browser_name: 'Firefox',
+      verdict: 'supported',
+      version_added: '2',
+      notes: ['clean'],
+      other_statements: [
+        {
+          version_added: '1',
+          flags: [{ name: 'flag', type: 'preference' }],
+          notes: ['flagged'],
+        },
+        { version_added: '1', prefix: 'moz', notes: ['prefixed'] },
+        { version_added: '1', partial: true, impl_url: ['https://example.test/p'] },
+      ],
+    });
+  });
+
+  it('a tie between equally clean statements keeps the first as the row and lists the second', () => {
+    expect(
+      row([
+        { version_added: '1', alternative_name: 'first' },
+        { version_added: '1', alternative_name: 'second', version_removed: '3' },
+      ]),
+    ).toEqual({
+      browser_id: 'firefox',
+      browser_name: 'Firefox',
+      verdict: 'prefixed',
+      version_added: '1',
+      alternative_name: 'first',
+      other_statements: [{ version_added: '1', alternative_name: 'second', version_removed: '3' }],
+    });
+  });
+
+  it('a removed row is the latest range, though BCD lists it second; the earlier range is listed with its ≤ bound split out', () => {
+    expect(
+      row([
+        { version_added: '≤1', version_removed: '1', prefix: 'moz' },
+        { version_added: '1', version_removed: '2', version_last: '1' },
+      ]),
+    ).toEqual({
+      browser_id: 'firefox',
+      browser_name: 'Firefox',
+      verdict: 'removed',
+      version_added: '1',
+      version_removed: '2',
+      version_last: '1',
+      other_statements: [
+        {
+          version_added: '1',
+          version_added_is_upper_bound: true,
+          version_removed: '1',
+          prefix: 'moz',
+        },
+      ],
+    });
+  });
+
+  it('unsupported merges every false statement into the row and lists only the rest', () => {
+    expect(
+      row([
+        { version_added: '3', notes: 'future' },
+        { version_added: false, notes: 'not yet' },
+        { version_added: 'preview', notes: 'preview' },
+      ]),
+    ).toEqual({
+      browser_id: 'firefox',
+      browser_name: 'Firefox',
+      verdict: 'unsupported',
+      notes: ['not yet'],
+      other_statements: [
+        { version_added: '3', notes: ['future'] },
+        { version_added: 'preview', notes: ['preview'] },
+      ],
+    });
+  });
+
+  it('preview_only merges every preview statement and lists none of them', () => {
+    expect(
+      row([
+        { version_added: 'preview', notes: 'one' },
+        { version_added: 'preview', notes: 'two' },
+      ]),
+    ).toEqual({
+      browser_id: 'firefox',
+      browser_name: 'Firefox',
+      verdict: 'preview_only',
+      notes: ['one', 'two'],
+    });
+  });
+
+  it('an unknown row is built from no statement, so every statement is listed', () => {
+    expect(row([{ version_added: '≤3' }, { version_added: false, notes: 'no' }])).toEqual({
+      browser_id: 'firefox',
+      browser_name: 'Firefox',
+      verdict: 'unknown',
+      other_statements: [
+        { version_added: '3', version_added_is_upper_bound: true },
+        { notes: ['no'] },
+      ],
+    });
+  });
+
+  it('one statement, and a browser absent from the leaf, carry no other_statements', () => {
+    expect(row({ version_added: '1', prefix: 'moz' })).toStrictEqual({
+      browser_id: 'firefox',
+      browser_name: 'Firefox',
+      verdict: 'prefixed',
+      version_added: '1',
+      prefix: 'moz',
+    });
+    expect(service.supportRows(leaf({ version_added: '1' }), ['safari'])[0]).toEqual({
+      browser_id: 'safari',
+      browser_name: 'Safari',
+      verdict: 'unknown',
+    });
+  });
+});
+
 describe('#14 full-support requirement', () => {
   it.each<SimpleSupportStatement>([
     { version_added: '1', partial_implementation: true },
@@ -172,5 +303,37 @@ describe('#14 full-support requirement', () => {
       name: 'Firefox',
       version: '2',
     });
+  });
+  it('breaks a release-date tie toward the first browser in core order', () => {
+    expect(service.limitingBrowser(leaf({ version_added: '1' }), ['chrome', 'firefox'])).toEqual({
+      browser_id: 'chrome',
+      name: 'Chrome',
+      version: '1',
+    });
+    expect(service.limitingBrowser(leaf({ version_added: '1' }), ['firefox', 'chrome'])).toEqual({
+      browser_id: 'firefox',
+      name: 'Firefox',
+      version: '1',
+    });
+  });
+});
+
+describe('#30 limiting_browser keeps a ≤ bound visible', () => {
+  it('flags a ≤ added release as an upper bound and keeps version as the release', () => {
+    expect(service.limitingBrowser(leaf({ version_added: '≤2' }), ['chrome', 'firefox'])).toEqual({
+      browser_id: 'firefox',
+      name: 'Firefox',
+      version: '2',
+      version_is_upper_bound: true,
+    });
+  });
+  it('omits the flag when the limiting browser is exact, even beside a ≤ bound elsewhere', () => {
+    const mixed: CompatStatement = {
+      source_file: 'api/Fixture.json',
+      support: { chrome: { version_added: '≤1' }, firefox: { version_added: '2' } },
+    };
+    const result = service.limitingBrowser(mixed, ['chrome', 'firefox']);
+    expect(result).toEqual({ browser_id: 'firefox', name: 'Firefox', version: '2' });
+    expect(result).not.toHaveProperty('version_is_upper_bound');
   });
 });

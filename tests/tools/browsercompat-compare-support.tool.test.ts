@@ -1,8 +1,8 @@
 /**
  * @fileoverview Tests for browsercompat_compare_support — the design's worked
  * `defaults` example (3 features, none clears), unchecked_targets reasons,
- * ambiguous/inconclusive/miss verdicts, target paging, error paths, and
- * format() rendering.
+ * ambiguous/inconclusive/miss verdicts, feature-level judgment of multi-key
+ * ids, target paging, error paths, and format() rendering.
  * @module tests/tools/browsercompat-compare-support.tool.test
  */
 
@@ -68,7 +68,7 @@ describe('browsercompat_compare_support — worked example: defaults', () => {
 
   it('reports coverage figures matching the real caniuse-derived percentages', async () => {
     const { result } = await run(FEATURES, 'defaults');
-    expect(result.target_coverage_percent).toBeCloseTo(84.1977, 3);
+    expect(result.target_coverage_percent).toBeCloseTo(83.9128, 3);
     expect(result.unchecked_coverage_percent).toBeCloseTo(0.7324, 3);
   });
 
@@ -78,7 +78,7 @@ describe('browsercompat_compare_support — worked example: defaults', () => {
     expect(result.results[0]).toMatchObject({
       failing_total: 0,
       evaluated_total: 30,
-      evaluated_coverage_percent: 84.1977,
+      evaluated_coverage_percent: 83.9128,
       unchecked_total: 5,
       unchecked_coverage_percent: 0.7324,
     });
@@ -114,18 +114,17 @@ describe('browsercompat_compare_support — worked example: defaults', () => {
     ]);
   });
 
-  it('anchor-name additionally fails on firefox 140 and ios_saf 18.5-18.7', async () => {
+  it('anchor-name additionally fails on ios_saf 18.5-18.7', async () => {
     const pages = await runAllPages(FEATURES, 'defaults');
     const failing = pages.flatMap((page) => page.results[2]?.failing_targets ?? []);
     expect(failing.map((t) => `${t.agent} ${t.version_token}`)).toEqual([
       'chrome 120',
       'chrome 109',
-      'firefox 140',
       'ios_saf 18.5-18.7',
       'op_mob 80',
     ]);
     expect(failing.every((t) => t.verdict === 'unsupported')).toBe(true);
-    expect(pages[0]?.results[2]).toMatchObject({ verdict: 'fails', failing_total: 5 });
+    expect(pages[0]?.results[2]).toMatchObject({ verdict: 'fails', failing_total: 4 });
   });
 
   it('conforms to the declared output schema on every page', async () => {
@@ -152,19 +151,6 @@ describe('browsercompat_compare_support — verdicts', () => {
       failing_targets: [],
       guidance: expect.stringContaining('nope-xyz'),
     });
-    expect(result.all_clear).toBe(false);
-  });
-
-  it('ambiguous: a multi-key id reports compat_keys and asks for a single key (D26)', async () => {
-    const { result } = await run(['grid'], 'defaults');
-    const gridResult = result.results[0];
-    expect(gridResult).toMatchObject({
-      found: true,
-      verdict: 'ambiguous',
-      failing_targets: [],
-    });
-    expect(gridResult?.compat_keys?.length).toBeGreaterThan(1);
-    expect(gridResult?.guidance).toContain('compat_keys');
     expect(result.all_clear).toBe(false);
   });
 
@@ -196,9 +182,19 @@ describe('browsercompat_compare_support — every token unchecked, none unmapped
   });
 
   it('every feature is inconclusive when no target was evaluated — never a vacuous clears', async () => {
-    const { result } = await run(['css.selectors.has', 'nope-xyz', 'grid'], 'safari TP');
-    expect(result.results.map((r) => r.verdict)).toEqual(['inconclusive', 'miss', 'ambiguous']);
+    const { result } = await run(['css.selectors.has', 'nope-xyz', 'grid', 'http2'], 'safari TP');
+    expect(result.results.map((r) => r.verdict)).toEqual([
+      'inconclusive',
+      'miss',
+      'inconclusive',
+      'ambiguous',
+    ]);
     expect(result.results[0]?.failing_targets).toEqual([]);
+    expect(result.results[2]).toMatchObject({
+      support_source: 'web_features_feature',
+      evaluated_total: 0,
+      failing_targets: [],
+    });
     expect(result.all_clear).toBe(false);
     expect(result.target_coverage_percent).toBe(0);
   });
@@ -232,16 +228,18 @@ describe('browsercompat_compare_support — resolve: true', () => {
     });
   });
 
-  it('a multi-key feature name is ambiguous with compat_keys, not a miss', async () => {
+  it('a multi-key feature name is judged on its feature-level support, with compat_keys', async () => {
     const { result } = await run(['Container queries (size)'], 'chrome 120', true);
     expect(result.results[0]).toMatchObject({
       found: true,
-      verdict: 'ambiguous',
+      verdict: 'clears',
+      support_source: 'web_features_feature',
       resolved_as: { bcd_key: null, baseline_id: 'container-queries', resolved_via: 'search' },
       failing_targets: [],
     });
-    expect(result.results[0]?.compat_keys).toHaveLength(12);
-    expect(result.all_clear).toBe(false);
+    expect(result.results[0]?.compat_keys).toHaveLength(10);
+    expect(result.results[0]?.compat_keys_total).toBe(12);
+    expect(result.all_clear).toBe(true);
   });
 
   it('a path_suffix notation gets a real verdict against its exact key', async () => {
@@ -340,18 +338,6 @@ describe('browsercompat_compare_support — errors', () => {
     ).toBe(true);
   });
 
-  it('rejects an empty features array and an over-cap features array at the schema boundary', () => {
-    expect(
-      browsercompatCompareSupport.input.safeParse({ features: [], targets: 'defaults' }).success,
-    ).toBe(false);
-    expect(
-      browsercompatCompareSupport.input.safeParse({
-        features: Array(21).fill('has'),
-        targets: 'defaults',
-      }).success,
-    ).toBe(false);
-  });
-
   it('rejects an empty and an over-200-character entry at the schema boundary', () => {
     expect(
       browsercompatCompareSupport.input.safeParse({ features: ['has', ''], targets: 'defaults' })
@@ -375,7 +361,7 @@ describe('browsercompat_compare_support — errors', () => {
 describe('browsercompat_compare_support — enrichment', () => {
   it('always echoes data_version, attribution, and the page arithmetic, with totalCount counting query targets', async () => {
     const { ctx } = await run(['has', 'grid', 'nope-xyz'], 'chrome 120, chrome 109');
-    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.3' });
+    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.5' });
     expect(getEnrichment(ctx).attribution).toMatch(/caniuse\.com/);
     expect(getEnrichment(ctx)).toMatchObject({
       totalCount: 2,
@@ -439,7 +425,7 @@ describe('browsercompat_compare_support — format()', () => {
     const text = (blocks?.[0] as { text: string } | undefined)?.text;
     expect(text).toContain('# 0 of 3 features clears `defaults`');
     expect(text).toContain(
-      'Evaluated for every compared feature: 30 of 35 target versions (84.1977% of tracked traffic) · not evaluated: 5 (0.7324%)',
+      'Evaluated for every compared feature: 30 of 35 target versions (83.9128% of tracked traffic) · not evaluated: 5 (0.7324%)',
     );
     expect(text).toContain(
       'Compared 3 of 3 features · 30 of 35 target versions map to a browser-compat-data release',
@@ -476,12 +462,19 @@ describe('browsercompat_compare_support — format()', () => {
     expect(text).toContain('| safari TP | unknown_version |');
   });
 
-  it('renders compat_keys and guidance for an ambiguous result', async () => {
-    const { result } = await run(['grid'], 'defaults');
+  it('renders support_source on every compared result, and compat_keys on a feature-level one', async () => {
+    const { result } = await run(['grid', 'css.selectors.has'], 'defaults');
     const blocks = browsercompatCompareSupport.format?.(result);
-    const text = (blocks?.[0] as { text: string } | undefined)?.text;
-    expect(text).toContain('**ambiguous**');
-    expect(text).toContain('compat_keys:');
-    expect(text).toMatch(/css\.properties\.display\.grid/);
+    const lines = ((blocks?.[0] as { text: string } | undefined)?.text ?? '').split('\n');
+    expect(lines.filter((line) => line.startsWith('  - support_source: '))).toEqual([
+      '  - support_source: web_features_feature — web-features’ release per Baseline core browser for the feature as a whole',
+      '  - support_source: bcd_key',
+    ]);
+    expect(lines.filter((line) => line.startsWith('  - compat_keys: '))).toEqual([
+      `  - compat_keys: 10 of 61: ${result.results[0]?.compat_keys?.join(', ')} — call browsercompat_get_feature with grid for all 61`,
+    ]);
+    expect(lines).toContain(
+      '  - not evaluated on android 154 (no_feature_level_data, 0.0305% usage)',
+    );
   });
 });

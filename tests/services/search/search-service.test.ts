@@ -1,19 +1,23 @@
 /**
  * @fileoverview Tests for the search service: `stripTags`/`tokenize`/
- * `querySegments` as pure functions, the six-tier ranking (including the tier 2
- * `path_suffix` match), its within-tier tie-breaks, and the group and snapshot
- * filters against a synthetic, fully controlled index; then ranking pins and
- * the design's worked examples against the real bundled data.
+ * `indexTokens`/`singularReadings`/`querySegments` as pure functions, the
+ * six-tier ranking (including the tier 2 `path_suffix` match and singular/plural
+ * matching in tiers 3 to 6), its within-tier tie-breaks, and the group and
+ * snapshot filters against a synthetic, fully controlled index; then ranking
+ * pins and the design's worked examples against the real bundled data.
  * @module tests/services/search/search-service.test
  */
 
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { getBaselineService } from '@/services/baseline/baseline-service.js';
 import type { BaselineState } from '@/services/baseline/types.js';
 import {
   getSearchService,
+  indexTokens,
   querySegments,
   SearchService,
+  singularReadings,
   stripTags,
   tokenize,
 } from '@/services/search/search-service.js';
@@ -62,6 +66,59 @@ describe('tokenize', () => {
   });
 });
 
+describe('indexTokens', () => {
+  it('adds the parts of a hyphenated token after the whole token', () => {
+    expect(indexTokens('grid-template-columns')).toEqual([
+      'grid-template-columns',
+      'grid',
+      'template',
+      'columns',
+    ]);
+  });
+
+  it('adds the -y reading of every -ies word, hyphen parts included', () => {
+    expect(indexTokens('Container queries')).toEqual(['container', 'queries', 'query']);
+    expect(indexTokens('style-queries')).toEqual([
+      'style-queries',
+      'style-query',
+      'style',
+      'queries',
+      'query',
+    ]);
+  });
+
+  it('keeps a reading only at three or more characters', () => {
+    expect(indexTokens('ties')).toEqual(['ties']);
+    expect(indexTokens('flies')).toEqual(['flies', 'fly']);
+  });
+
+  it('leaves a token with no hyphen and no -ies ending as tokenize returns it', () => {
+    expect(indexTokens('containerQuery grid')).toEqual(tokenize('containerQuery grid'));
+    expect(indexTokens('-webkit-box')).toEqual(['-webkit-box', 'webkit', 'box']);
+  });
+});
+
+describe('singularReadings', () => {
+  it.each([
+    ['queries', ['query', 'querie']],
+    ['boxes', ['box', 'boxe']],
+    ['matches', ['match', 'matche']],
+    ['wishes', ['wish', 'wishe']],
+    ['grids', ['grid']],
+    ['properties', ['property', 'propertie']],
+    ['axes', ['axe']],
+  ])('reads "%s" as %j', (token, readings) => {
+    expect(singularReadings(token)).toEqual(readings);
+  });
+
+  it.each(['has', 'ems', 'ms', 'class', 'status', 'axis', 'this', 'grid', 'query'])(
+    'gives "%s" no reading: under four characters, a guarded ending, or no trailing s',
+    (token) => {
+      expect(singularReadings(token)).toEqual([]);
+    },
+  );
+});
+
 describe('querySegments', () => {
   it('splits on dots, colons, and whitespace, lowercasing each segment', () => {
     expect(querySegments('Element.animate')).toEqual(['element', 'animate']);
@@ -90,22 +147,22 @@ function row(overrides: Partial<IndexRow> & { name?: string; description?: strin
   const namespace = overrides.namespace ?? overrides.bcd_key?.split('.')[0];
   return {
     baseline_state: 'widely' as BaselineState,
-    caniuseTitleTokens: overrides.caniuse_title ? tokenize(overrides.caniuse_title) : [],
-    descriptionTokens: description ? tokenize(description) : [],
+    caniuseTitleTokens: overrides.caniuse_title ? indexTokens(overrides.caniuse_title) : [],
+    descriptionTokens: description ? indexTokens(description) : [],
     groups: [],
     snapshots: [],
     lastSegmentTokens: overrides.bcd_key
-      ? tokenize(overrides.bcd_key.split('.').at(-1) ?? '')
+      ? indexTokens(overrides.bcd_key.split('.').at(-1) ?? '')
       : overrides.baseline_id
-        ? tokenize(overrides.baseline_id)
+        ? indexTokens(overrides.baseline_id)
         : [],
     ...(namespace === undefined ? {} : { namespace }),
-    nameTokens: name ? tokenize(name) : [],
+    nameTokens: name ? indexTokens(name) : [],
     pathSegmentCount: overrides.bcd_key ? overrides.bcd_key.split('.').length : 1,
     pathTokens: overrides.bcd_key
-      ? tokenize(overrides.bcd_key)
+      ? indexTokens(overrides.bcd_key)
       : overrides.baseline_id
-        ? tokenize(overrides.baseline_id)
+        ? indexTokens(overrides.baseline_id)
         : [],
     ...overrides,
   };
@@ -158,11 +215,10 @@ describe('SearchService#rank — tiered matching (synthetic index, one property 
   it('tier 4: every query token appears in the last path segment, not the name', () => {
     const target = row({
       bcd_key: 'api.CSSContainerRule.containerQuery',
-      name: 'Container queries',
+      name: 'Size queries',
     });
     const service = new SearchService([target], new Map());
-    // "container query" (singular) is not a substring of "queries" (plural),
-    // so name (tier 3) misses; the camelCase-split last segment still hits.
+    // The name lacks "container", so tier 3 misses; the camelCase-split last segment hits.
     const hits = service.rank('container query', {});
     expect(hits[0]).toMatchObject({ tier: 4, matched_on: 'path_segment' });
   });
@@ -215,6 +271,59 @@ describe('SearchService#rank — tiered matching (synthetic index, one property 
     const hits = service.rank('has selector', {});
     expect(hits).toHaveLength(1);
     expect(hits[0]?.tier).toBe(3);
+  });
+});
+
+describe('SearchService#rank — singular and plural forms (synthetic index)', () => {
+  it('a singular query reaches an -ies plural at the same tier as the plural query', () => {
+    const target = row({ bcd_key: 'css.at-rules.container', name: 'Container queries (size)' });
+    const service = new SearchService([target], new Map());
+    for (const query of ['container query', 'container queries']) {
+      expect(service.rank(query, {})).toEqual([{ row: target, tier: 3, matched_on: 'name' }]);
+    }
+  });
+
+  it('a plural query reaches a singular field token, in every tier from 3 to 6', () => {
+    const named = row({ bcd_key: 'css.properties.grid', name: 'Grid' });
+    const segment = row({ bcd_key: 'css.properties.grid-area' });
+    const described = row({ bcd_key: 'css.properties.gap', description: 'Gaps in a grid layout' });
+    const titled = row({ bcd_key: 'css.properties.order', caniuse_title: 'CSS grid order' });
+    const pathed = row({ bcd_key: 'css.types.grid-template.subgrid' });
+    const service = new SearchService([named, segment, described, titled, pathed], new Map());
+    expect(service.rank('grids', {})).toEqual([
+      { row: named, tier: 3, matched_on: 'name' },
+      { row: segment, tier: 4, matched_on: 'path_segment' },
+      { row: described, tier: 5, matched_on: 'description' },
+      { row: titled, tier: 5, matched_on: 'caniuse_title' },
+      { row: pathed, tier: 6, matched_on: 'path_tokens' },
+    ]);
+  });
+
+  it('a plural query reaches a hyphenated token through the hyphen part its reading equals', () => {
+    const target = row({ bcd_key: 'css.properties.custom-property' });
+    const service = new SearchService([target], new Map());
+    expect(service.rank('custom properties', {})).toEqual([
+      { row: target, tier: 4, matched_on: 'path_segment' },
+    ]);
+  });
+
+  it('a reading never matches as a substring: "grids" misses gridlines and subgrid', () => {
+    const service = new SearchService(
+      [row({ bcd_key: 'css.properties.gridlines', name: 'Subgrid lines' })],
+      new Map(),
+    );
+    expect(service.rank('grids', {})).toEqual([]);
+    expect(service.rank('grid', {})).toHaveLength(1);
+  });
+
+  it('a guarded ending gets no reading: "class" and "status" miss a field token of their stem', () => {
+    const service = new SearchService(
+      [row({ bcd_key: 'api.clas', name: 'statu' }), row({ bcd_key: 'api.axi', name: 'thi' })],
+      new Map(),
+    );
+    for (const query of ['class', 'status', 'axis', 'this']) {
+      expect(service.rank(query, {})).toEqual([]);
+    }
   });
 });
 
@@ -384,19 +493,19 @@ describe('SearchService#rank — group and snapshot filters (synthetic index)', 
 });
 
 describe('SearchService — real bundled index', () => {
-  it('has 20,668 rows: every BCD leaf plus the 21 compat_features-less features', async () => {
+  it('has 20,717 rows: every BCD leaf plus the 21 compat_features-less features', async () => {
     const search = await getSearchService();
-    expect(search.size).toBe(20_668);
+    expect(search.size).toBe(20_717);
   });
 
-  it('"container query" limit-relevant query surfaces the container-queries feature via path_segment', async () => {
+  it('"container query" surfaces the container-queries feature on its name at tier 3', async () => {
     const search = await getSearchService();
     const hits = search.rank('container query', {});
     expect(hits.length).toBeGreaterThan(0);
     const top = hits[0];
     expect(top?.row.baseline_id).toBe('container-queries');
-    expect(top?.tier).toBe(4);
-    expect(top?.matched_on).toBe('path_segment');
+    expect(top?.tier).toBe(3);
+    expect(top?.matched_on).toBe('name');
   });
 
   it('BCD descriptions reach the index normalized once with link destinations retained', async () => {
@@ -423,15 +532,16 @@ function pin(hits: { row: IndexRow; tier: number; matched_on: string }[], take =
 }
 
 describe('SearchService — ranking pins for queries the path_suffix tier and tag handling must not move', () => {
-  it('"container query": 5 hits, tier 4 then 5', async () => {
-    const hits = (await getSearchService()).rank('container query', {});
-    expect(hits).toHaveLength(5);
-    expect(pin(hits)).toEqual([
-      'api.CSSContainerRule.containerQuery|4|path_segment',
-      'css.types.length.container_query_length_units|4|path_segment',
-      'css.at-rules.container.container-query_optional|4|path_segment',
-      'css.at-rules.container.style_queries_for_custom_properties.range_syntax|5|description',
-      'css.types.if.style.range_syntax|5|description',
+  it('"container query": the same 30 hits, in the same order, as "container queries"', async () => {
+    const search = await getSearchService();
+    const hits = search.rank('container query', {});
+    expect(hits).toHaveLength(30);
+    expect(pin(hits, 30)).toEqual(pin(search.rank('container queries', {}), 30));
+    expect(pin(hits, 4)).toEqual([
+      'api.CSSContainerRule|3|name',
+      'api.CSSContainerRule.containerName|3|name',
+      'api.CSSContainerRule.containerQuery|3|name',
+      'css.at-rules.container|3|name',
     ]);
   });
 
@@ -484,17 +594,82 @@ describe('SearchService — ranking pins for queries the path_suffix tier and ta
       'webassembly.jspi|5|description',
     ]);
     const grid = search.rank('grid', {});
-    expect(grid).toHaveLength(255);
+    expect(grid).toHaveLength(254);
     expect(pin(grid, 2)).toEqual([
       'css.properties.gap|1|baseline_id',
       'css.properties.grid|1|baseline_id',
     ]);
     const display = search.rank('display', { namespace: 'css' });
-    expect(display).toHaveLength(354);
+    expect(display).toHaveLength(355);
     expect(pin(display, 1)).toEqual(['css.properties.display|1|baseline_id']);
     const has = search.rank('has', { baseline: 'widely' });
-    expect(has).toHaveLength(254);
+    expect(has).toHaveLength(255);
     expect(pin(has, 2)).toEqual(['css.selectors.has|1|baseline_id', 'api.HashChangeEvent|3|name']);
+  });
+});
+
+describe('SearchService — singular and plural forms on the real bundled index', () => {
+  it('"media queries range" returns the same 3 tier 3 rows as "media query range"', async () => {
+    const search = await getSearchService();
+    const expected = [
+      'css.at-rules.media.dynamic-range|3|name',
+      'css.at-rules.media.range_syntax|3|name',
+      'css.at-rules.media.video-dynamic-range|3|name',
+    ];
+    expect(pin(search.rank('media queries range', {}), 10)).toEqual(expected);
+    expect(pin(search.rank('media query range', {}), 10)).toEqual(expected);
+  });
+
+  it('"grids" reaches css.properties.grid at tier 3', async () => {
+    const hits = (await getSearchService()).rank('grids', {});
+    expect(hits.find((hit) => hit.row.bcd_key === 'css.properties.grid')).toMatchObject({
+      tier: 3,
+      matched_on: 'name',
+    });
+  });
+
+  it('"custom property" ranks custom-property and var at tier 3, 7th and 8th behind shorter and api paths', async () => {
+    const hits = (await getSearchService()).rank('custom property', {});
+    expect(pin(hits, 10)).toEqual([
+      'api.CSSPropertyRule|3|name',
+      'api.CSS.registerProperty_static|3|name',
+      'api.CSSPropertyRule.inherits|3|name',
+      'api.CSSPropertyRule.initialValue|3|name',
+      'api.CSSPropertyRule.name|3|name',
+      'api.CSSPropertyRule.syntax|3|name',
+      'css.properties.custom-property|3|name',
+      'css.types.var|3|name',
+      'css.at-rules.property|3|name',
+      'css.at-rules.property.inherits|3|name',
+    ]);
+  });
+
+  /**
+   * Fingerprints of the full ranking (`key|tier|matched_on`, one per line,
+   * SHA-256, first 16 hex) taken before singular readings existed. Each word is
+   * one the readings must leave alone: under four characters, a guarded ending,
+   * or a reading that equals no whole token.
+   */
+  it.each([
+    ['has', 446, '660558e6ee7b3458'],
+    ['this', 437, '8fa6f15d9476643d'],
+    ['ems', 119, 'ef0e949065f2dfcf'],
+    ['ms', 1195, 'bcfaaa52b5d48c05'],
+    ['axis', 29, '7a688ec2218e7d98'],
+    ['axes', 5, '8f97cba17b25d6c6'],
+    ['status', 361, '8dbe582210ae2a26'],
+    ['class', 370, 'a2725ca91ea22c04'],
+    ['canvas', 882, 'f0708d94e94a65bf'],
+    ['alias', 59, '1655cd20692d2e5c'],
+    ['series', 42, 'de72f4d5e1e0979f'],
+  ])('"%s" returns exactly the %i rows it returned before', async (query, count, fingerprint) => {
+    const hits = (await getSearchService()).rank(query, {});
+    expect(hits).toHaveLength(count);
+    const digest = createHash('sha256')
+      .update(pin(hits, hits.length).join('\n'))
+      .digest('hex')
+      .slice(0, 16);
+    expect(digest).toBe(fingerprint);
   });
 });
 

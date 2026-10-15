@@ -1,7 +1,9 @@
 /**
  * @fileoverview Tool returning the full compatibility record for one web
  * feature: Baseline state and dates, standards status, per-browser support with
- * flags and prefixes, the limiting browser, and MDN and specification links.
+ * flags and prefixes — or web-features' feature-level core-browser support for
+ * an id spanning several keys — the limiting browser, and MDN and specification
+ * links.
  * @module mcp-server/tools/definitions/browsercompat-get-feature
  */
 
@@ -18,12 +20,18 @@ import {
 import { markdownText } from '@/utils/markdown-text.js';
 import {
   BaselineSchema,
+  COMPAT_KEYS_PAGE_SIZE,
   DiscouragedSchema,
+  FeatureSupportRowSchema,
   formatBaselineLine,
+  formatCompatKeys,
+  formatFeatureSupportRow,
+  formatLimitingBrowser,
   formatSupportRow,
   LimitingBrowserSchema,
   ResolvedAsSchema,
   SupportRowSchema,
+  sliceCompatKeys,
 } from './compat-shapes.js';
 
 const StatusSchema = z.object({
@@ -41,7 +49,7 @@ const StatusSchema = z.object({
 
 export const browsercompatGetFeature = tool('browsercompat_get_feature', {
   description:
-    'Get the compatibility record for one web feature: Baseline state and the date it crossed, deprecation and standards status, per-browser version added and removed with flags, vendor prefixes and partial-implementation notes, and the MDN and specification links. Accepts a BCD key such as css.selectors.has or a web-features id such as has; the response echoes which one it matched. An unresolved feature returns found: false with guidance rather than an error.',
+    'Get the compatibility record for one web feature: Baseline state and the date it crossed, deprecation and standards status, per-browser version added and removed with flags, vendor prefixes and partial-implementation notes — with every other support statement recorded for that browser, such as an earlier prefixed or flagged release, in other_statements — and the MDN and specification links. Accepts a BCD key such as css.selectors.has or a web-features id such as has; the response echoes which one it matched. A web-features id that spans several BCD keys, such as grid, returns web-features’ own feature-level release per Baseline core browser in feature_support and its compat_keys, 100 per page, in place of per-key fields. An unresolved feature returns found: false with guidance rather than an error.',
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
 
   input: z.object({
@@ -56,7 +64,7 @@ export const browsercompatGetFeature = tool('browsercompat_get_feature', {
       .boolean()
       .default(false)
       .describe(
-        'When true, a string that is neither a key nor an id falls back to the search index, such as "Container queries (size)" or "Element.prototype.animate". Its best exact matches are accepted only when they name one feature: a single key resolves to that key, several keys of one web-features feature resolve to the feature with compat_keys, and matches spanning two features are a miss. Off by default so a typo returns a miss you can correct rather than a confident answer about the wrong feature.',
+        'When true, a string that is neither a key nor an id falls back to the search index, such as "Container queries (size)" or "Element.prototype.animate". Its best exact matches are accepted only when they name one feature: a single key resolves to that key, several keys of one web-features feature resolve to the feature with its feature_support and compat_keys, and matches spanning two features are a miss. Off by default so a typo returns a miss you can correct rather than a confident answer about the wrong feature.',
       ),
     include_runtimes: z
       .boolean()
@@ -71,6 +79,14 @@ export const browsercompatGetFeature = tool('browsercompat_get_feature', {
       .default(0)
       .describe(
         'Direct child keys to skip, default 0. Each subkeys page contains at most 100 keys; pass its next_offset to continue.',
+      ),
+    compat_keys_offset: z
+      .number()
+      .int()
+      .min(0)
+      .default(0)
+      .describe(
+        'compat_keys to skip, default 0, for a web-features id that spans several keys. Each page of compat_keys holds at most 100; pass compat_keys_next_offset to continue. Has no effect when the feature resolves to a single key.',
       ),
   }),
 
@@ -101,13 +117,19 @@ export const browsercompatGetFeature = tool('browsercompat_get_feature', {
       'Feature-level discouragement, independent of leaf standards status. Also retained in status.discouraged when status exists.',
     ),
     limiting_browser: LimitingBrowserSchema.optional().describe(
-      'Among the Baseline core browsers, the one requiring the newest release. Present only when every core browser has full, unprefixed, unflagged support at a resolvable added release.',
+      'Among the Baseline core browsers, the one whose required release is newest by release date. For a single key, present only when every core browser has full, unprefixed, unflagged support at a resolvable added release; for an id spanning more than one key, read from feature_support and present only when it lists all seven core browsers.',
     ),
     support: z
       .array(SupportRowSchema.describe('Support for one reported browser.'))
       .optional()
       .describe(
-        'One row per reported browser. Absent when the id spans more than one browser-compat-data key.',
+        'One row per reported browser, judged at its newest shipped release, with the other statements recorded for that browser in other_statements. Absent when the id spans more than one browser-compat-data key; feature_support covers that case.',
+      ),
+    feature_support: z
+      .array(FeatureSupportRowSchema.describe('web-features’ support for one core browser.'))
+      .optional()
+      .describe(
+        'Present only when the web-features id spans more than one browser-compat-data key: one row per Baseline core browser with the release web-features lists for the feature as a whole, the data its feature-level Baseline is computed from. It is web-features’ answer for the feature, not a combination of its keys, and a key can differ from it either way — a lists Chrome 1 while one of its keys is unsupported, and anchor-positioning lists no Chrome release though most of its keys are supported there. Call this tool with one of compat_keys for a key-level answer. Non-core browsers are not covered.',
       ),
     mdn_url: z.string().optional().describe('MDN reference page for the resolved key.'),
     spec_urls: z
@@ -118,8 +140,20 @@ export const browsercompatGetFeature = tool('browsercompat_get_feature', {
       .array(z.string())
       .optional()
       .describe(
-        'Present when the web-features id spans more than one browser-compat-data key. Call this tool again with one of them for the per-browser fields.',
+        'Present when the web-features id spans more than one browser-compat-data key, or as an empty list when it owns none: at most 100 of its keys in declaration order, starting at compat_keys_offset. Call this tool again with one of them for the per-key support, status, and links.',
       ),
+    compat_keys_total: z
+      .number()
+      .int()
+      .optional()
+      .describe(
+        'Every browser-compat-data key the id owns, before paging. Present with compat_keys.',
+      ),
+    compat_keys_next_offset: z
+      .number()
+      .int()
+      .optional()
+      .describe('compat_keys_offset for the next page of compat_keys; absent at or past the end.'),
     subkeys: z
       .object({
         total: z.number().int().describe('Total direct callable child keys, before paging.'),
@@ -243,8 +277,18 @@ export const browsercompatGetFeature = tool('browsercompat_get_feature', {
       }
     }
 
+    const compatKeys = resolution.compat_keys;
+    /** An id spanning several keys is answered from web-features' own feature-level support. */
+    const multiKeyId = (compatKeys?.length ?? 0) > 0 ? featureId : null;
+    const featureLevel = multiKeyId === null ? undefined : baseline.featureSupport(multiKeyId);
+    const featureSupport =
+      multiKeyId === null ? undefined : baseline.featureSupportRows(multiKeyId);
     const limiting =
-      leaf === undefined ? undefined : bcd.limitingBrowser(leaf, baseline.coreBrowserIds);
+      leaf !== undefined
+        ? bcd.limitingBrowser(leaf, baseline.coreBrowserIds)
+        : featureLevel !== undefined
+          ? bcd.featureLimitingBrowser(featureLevel, baseline.coreBrowserIds)
+          : undefined;
 
     const specUrls =
       leaf?.spec_url === undefined
@@ -253,7 +297,6 @@ export const browsercompatGetFeature = tool('browsercompat_get_feature', {
           ? [leaf.spec_url]
           : [...leaf.spec_url];
 
-    const compatKeys = resolution.compat_keys;
     const children = key === null ? [] : bcd.directChildren(key);
     const childKeys = children.slice(input.subkeys_offset, input.subkeys_offset + 100);
     const nextOffset = input.subkeys_offset + childKeys.length;
@@ -266,6 +309,10 @@ export const browsercompatGetFeature = tool('browsercompat_get_feature', {
             truncated: nextOffset < children.length,
             ...(nextOffset < children.length ? { next_offset: nextOffset } : {}),
           };
+    const compatKeysPage =
+      compatKeys === undefined
+        ? undefined
+        : sliceCompatKeys(compatKeys, input.compat_keys_offset, COMPAT_KEYS_PAGE_SIZE);
     const noCompatData = key === null && (compatKeys?.length ?? 0) === 0;
     const guidance = noCompatData
       ? `"${featureId ?? query}" is a tracked web-features entry with no browser-compat-data keys yet, so there is no per-browser support to report. Call browsercompat_check_baseline for its Baseline state.`
@@ -284,9 +331,18 @@ export const browsercompatGetFeature = tool('browsercompat_get_feature', {
       ...(discouraged === undefined ? {} : { discouraged }),
       ...(limiting === undefined ? {} : { limiting_browser: limiting }),
       ...(support === undefined ? {} : { support }),
+      ...(featureSupport === undefined ? {} : { feature_support: featureSupport }),
       ...(leaf?.mdn_url === undefined ? {} : { mdn_url: leaf.mdn_url }),
       ...(specUrls === undefined ? {} : { spec_urls: specUrls }),
-      ...(compatKeys === undefined ? {} : { compat_keys: compatKeys }),
+      ...(compatKeysPage === undefined
+        ? {}
+        : {
+            compat_keys: compatKeysPage.compat_keys,
+            compat_keys_total: compatKeysPage.compat_keys_total,
+            ...(compatKeysPage.nextOffset === undefined
+              ? {}
+              : { compat_keys_next_offset: compatKeysPage.nextOffset }),
+          }),
       ...(subkeys === undefined ? {} : { subkeys }),
       ...(guidance === undefined ? {} : { guidance }),
     };
@@ -309,9 +365,11 @@ export const browsercompatGetFeature = tool('browsercompat_get_feature', {
       );
     } else if (result.found) {
       lines.push(
-        resolved?.bcd_key === null
-          ? '**Status:** not reported — this id spans more than one browser-compat-data key.'
-          : '**Status:** not recorded for this key.',
+        resolved?.bcd_key !== null
+          ? '**Status:** not recorded for this key.'
+          : result.compat_keys_total === 0
+            ? '**Status:** not reported — this id owns no browser-compat-data keys.'
+            : '**Status:** not reported — this id spans more than one browser-compat-data key.',
       );
     }
     const advisories = [result.discouraged, result.status?.discouraged].filter(
@@ -326,7 +384,7 @@ export const browsercompatGetFeature = tool('browsercompat_get_feature', {
     }
     if (result.limiting_browser) {
       lines.push(
-        `**Limiting browser:** ${markdownText(result.limiting_browser.name)} (${markdownText(result.limiting_browser.browser_id)}) ${markdownText(result.limiting_browser.version)} — full support in every core browser`,
+        formatLimitingBrowser(result.limiting_browser, result.feature_support ? 'feature' : 'key'),
       );
     }
     if (result.description) lines.push('', markdownText(result.description));
@@ -334,11 +392,24 @@ export const browsercompatGetFeature = tool('browsercompat_get_feature', {
       lines.push('', '## Support');
       for (const row of result.support) lines.push(...formatSupportRow(row));
     }
+    if (result.feature_support) {
+      lines.push(
+        '',
+        '## Feature-level support (web-features, Baseline core browsers)',
+        'web-features’ release for the feature as a whole, not for any one key — a key in compat_keys can differ either way. Call browsercompat_get_feature with one of compat_keys for a key-level answer.',
+      );
+      for (const row of result.feature_support) lines.push(formatFeatureSupportRow(row));
+    }
     if (result.compat_keys) {
       lines.push(
         '',
-        `**compat_keys:** ${result.compat_keys.length === 0 ? 'none — this entry owns no browser-compat-data keys' : result.compat_keys.map(markdownText).join(', ')}`,
+        `**compat_keys:** ${formatCompatKeys(result.compat_keys, result.compat_keys_total ?? result.compat_keys.length)}`,
       );
+      if (result.compat_keys_next_offset !== undefined) {
+        lines.push(
+          `compat_keys_next_offset: ${result.compat_keys_next_offset} — re-run with compat_keys_offset: ${result.compat_keys_next_offset}.`,
+        );
+      }
     }
     if (result.mdn_url) lines.push('', `MDN: ${markdownText(result.mdn_url)}`);
     if (result.subkeys) {

@@ -7,6 +7,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { resolveFeature } from '@/services/baseline/feature-resolver.js';
+import { getSearchService } from '@/services/search/search-service.js';
 
 const OPTS = { resolve: false, toolName: 'browsercompat_get_feature' };
 
@@ -210,9 +211,13 @@ describe('resolveFeature — resolve: true search fallback (step 6, D6)', () => 
     expect(result.found).toBe(false);
   });
 
-  it('a top hit below tier 2 is a miss — "container query" tops out at tier 4', async () => {
-    const result = await resolveFeature('container query', { ...OPTS, resolve: true });
-    expect(result.found).toBe(false);
+  it('a top hit below tier 2 is a miss — "container query" tops out at tier 3, as "container queries" does', async () => {
+    const search = await getSearchService();
+    for (const query of ['container query', 'container queries']) {
+      expect(search.rank(query, {})[0]?.tier).toBe(3);
+      const result = await resolveFeature(query, { ...OPTS, resolve: true });
+      expect(result.found).toBe(false);
+    }
   });
 
   it('resolve: false never falls back to search, even for an unambiguous name', async () => {

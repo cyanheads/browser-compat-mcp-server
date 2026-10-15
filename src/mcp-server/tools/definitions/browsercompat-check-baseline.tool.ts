@@ -23,8 +23,14 @@ import {
 import { markdownText } from '@/utils/markdown-text.js';
 import {
   BaselineSchema,
+  batchCompatKeys,
   DiscouragedSchema,
+  FEATURES_MAX,
+  FEATURES_PER_CALL,
   formatBaselineLine,
+  formatBatchCompatKeys,
+  formatLimitingBrowser,
+  formatOmittedFeatures,
   LimitingBrowserSchema,
   ResolvedAsSchema,
 } from './compat-shapes.js';
@@ -46,7 +52,7 @@ const ResultSchema = z.object({
   name: z.string().optional().describe('web-features display name for the feature.'),
   baseline: BaselineSchema.optional().describe('Baseline state and the dates it crossed.'),
   limiting_browser: LimitingBrowserSchema.optional().describe(
-    'Among the Baseline core browsers, the one requiring the newest release. Present only when every core browser has full, unprefixed, unflagged support at a resolvable added release.',
+    'Among the Baseline core browsers, the one whose required release is newest by release date. For a single key, present only when every core browser has full, unprefixed, unflagged support at a resolvable added release; for an id spanning more than one key, read from web-features’ feature-level support for the feature as a whole and present only when it lists all seven core browsers.',
   ),
   deprecated: z
     .boolean()
@@ -77,23 +83,28 @@ const ResultSchema = z.object({
     .array(z.string())
     .optional()
     .describe(
-      'Present when the web-features id spans more than one browser-compat-data key. Call browsercompat_get_feature with one of them for per-browser data.',
+      'Present when the web-features id spans more than one browser-compat-data key, or as an empty list when it owns none: its first 10 keys in declaration order, with compat_keys_total counting all of them. Call browsercompat_get_feature with the id for the rest and its feature-level support per core browser, or with one of these keys for per-browser data.',
     ),
+  compat_keys_total: z
+    .number()
+    .int()
+    .optional()
+    .describe('Every browser-compat-data key the id owns. Present with compat_keys.'),
   guidance: z.string().optional().describe('What to do next when the feature did not resolve.'),
 });
 
 export const browsercompatCheckBaseline = tool('browsercompat_check_baseline', {
   description:
-    'Check whether web features are safe to ship: Baseline state and the date it crossed, the browser and version that limits support, whether the feature is deprecated or discouraged, and the share of tracked global traffic that requiring it would exclude. Accepts up to 20 BCD keys or web-features ids in one call.',
+    'Check whether web features are safe to ship: Baseline state and the date it crossed, the browser and version that limits support, whether the feature is deprecated or discouraged, and the share of tracked global traffic that requiring it would exclude. Evaluates up to 20 BCD keys or web-features ids per call; up to 100 may be sent, and entries past the 20th come back unevaluated in omitted_features for the next call.',
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
 
   input: z.object({
     features: z
       .array(z.string().min(1).max(200))
       .min(1)
-      .max(20)
+      .max(FEATURES_MAX)
       .describe(
-        'Up to 20 entries, each a browser-compat-data key such as css.selectors.has or a web-features id such as has, 1 to 200 characters. An empty or longer entry is rejected against this schema; a whitespace-only entry returns invalid_feature_input. Call browsercompat_search_features first for any entry whose key you do not already know.',
+        'Entries to check, each a browser-compat-data key such as css.selectors.has or a web-features id such as has, 1 to 200 characters. The first 20 are evaluated per call; up to 100 are accepted, and entries past the 20th are returned unevaluated in omitted_features. More than 100 entries, or an empty or longer entry anywhere in the list, is rejected against this schema; a whitespace-only entry anywhere returns invalid_feature_input. Call browsercompat_search_features first for any entry whose key you do not already know.',
       ),
     resolve: z
       .boolean()
@@ -105,12 +116,20 @@ export const browsercompatCheckBaseline = tool('browsercompat_check_baseline', {
 
   output: z.object({
     results: z
-      .array(ResultSchema.describe('One result per input entry, in input order.'))
-      .describe('One result per requested feature. A miss is a result, not a failure.'),
+      .array(ResultSchema.describe('One result per evaluated entry, in input order.'))
+      .describe(
+        'One result per evaluated entry — the first 20. A miss is a result, not a failure.',
+      ),
+    omitted_features: z
+      .array(z.string())
+      .optional()
+      .describe(
+        'Entries past the first 20, verbatim and in input order, that were not evaluated. Present only when the call sent more than 20; pass them as features in the next call.',
+      ),
     all_widely_available: z
       .boolean()
       .describe(
-        'True only when every entry resolved and reports Baseline widely. A single miss forces false. Deprecation and discouragement do not enter this answer.',
+        'True only when every entry resolved and reports Baseline widely. A single miss, or any entry in omitted_features, forces false. Deprecation and discouragement do not enter this answer.',
       ),
   }),
 
@@ -137,7 +156,7 @@ export const browsercompatCheckBaseline = tool('browsercompat_check_baseline', {
     {
       reason: 'invalid_feature_input',
       code: JsonRpcErrorCode.ValidationError,
-      when: 'An entry in features is whitespace-only. An empty or over-200-character entry is rejected against the input schema instead.',
+      when: 'An entry in features is whitespace-only, including an entry past the 20th. An empty or over-200-character entry is rejected against the input schema instead.',
       recovery:
         'Replace the whitespace-only entry with a BCD key such as css.selectors.has or a web-features id such as has; use browsercompat_search_features to find one.',
     },
@@ -161,11 +180,13 @@ export const browsercompatCheckBaseline = tool('browsercompat_check_baseline', {
       getTargetsService(),
     ]);
 
+    const evaluated = input.features.slice(0, FEATURES_PER_CALL);
+    const omitted = input.features.slice(FEATURES_PER_CALL);
     const results: z.infer<typeof ResultSchema>[] = [];
     const unresolved: string[] = [];
     let anyUsage = false;
 
-    for (const entry of input.features) {
+    for (const entry of evaluated) {
       const query = entry.trim();
       const resolution = await resolveFeature(query, {
         resolve: input.resolve,
@@ -196,8 +217,17 @@ export const browsercompatCheckBaseline = tool('browsercompat_check_baseline', {
           : featureId !== null
             ? baseline.baselineForFeature(featureId)
             : undefined;
+      /** An id spanning several keys is answered from web-features' own feature-level support. */
+      const featureLevel =
+        featureId !== null && (compatKeys?.length ?? 0) > 0
+          ? baseline.featureSupport(featureId)
+          : undefined;
       const limiting =
-        leaf === undefined ? undefined : bcd.limitingBrowser(leaf, baseline.coreBrowserIds);
+        leaf !== undefined
+          ? bcd.limitingBrowser(leaf, baseline.coreBrowserIds)
+          : featureLevel !== undefined
+            ? bcd.featureLimitingBrowser(featureLevel, baseline.coreBrowserIds)
+            : undefined;
       const discouraged = featureId === null ? undefined : baseline.discouraged(featureId);
       const featureKeys = featureId === null ? [] : baseline.compatKeys(featureId);
       const usageMatches = key === null || (featureKeys.length === 1 && featureKeys[0] === key);
@@ -222,7 +252,7 @@ export const browsercompatCheckBaseline = tool('browsercompat_check_baseline', {
         ...(excluded === undefined
           ? {}
           : { usage_percent_excluded: excluded, usage_source: USAGE_SOURCE }),
-        ...(compatKeys === undefined ? {} : { compat_keys: compatKeys }),
+        ...(compatKeys === undefined ? {} : batchCompatKeys(compatKeys)),
       });
     }
 
@@ -234,16 +264,21 @@ export const browsercompatCheckBaseline = tool('browsercompat_check_baseline', {
       });
     }
 
-    const allWidelyAvailable = results.every(
-      (result) => result.outcome !== 'miss' && result.baseline?.state === 'widely',
-    );
+    const allWidelyAvailable =
+      omitted.length === 0 &&
+      results.every((result) => result.outcome !== 'miss' && result.baseline?.state === 'widely');
 
     ctx.log.debug('Checked Baseline', {
       requested: input.features.length,
+      omitted: omitted.length,
       unresolved: unresolved.length,
     });
 
-    return { results, all_widely_available: allWidelyAvailable };
+    return {
+      results,
+      ...(omitted.length === 0 ? {} : { omitted_features: omitted }),
+      all_widely_available: allWidelyAvailable,
+    };
   },
 
   format: (result) => {
@@ -263,7 +298,10 @@ export const browsercompatCheckBaseline = tool('browsercompat_check_baseline', {
       if (item.baseline) lines.push(formatBaselineLine(item.baseline));
       if (item.limiting_browser) {
         lines.push(
-          `**Limiting browser:** ${markdownText(item.limiting_browser.name)} (${markdownText(item.limiting_browser.browser_id)}) ${markdownText(item.limiting_browser.version)} — full support in every core browser`,
+          formatLimitingBrowser(
+            item.limiting_browser,
+            item.resolved_as?.bcd_key === null ? 'feature' : 'key',
+          ),
         );
       }
       if (item.deprecated !== undefined) lines.push(`**deprecated:** ${item.deprecated}`);
@@ -280,11 +318,12 @@ export const browsercompatCheckBaseline = tool('browsercompat_check_baseline', {
         lines.push(`**usage_source:** ${markdownText(item.usage_source)}`);
       if (item.compat_keys) {
         lines.push(
-          `**compat_keys:** ${item.compat_keys.length === 0 ? 'none — this entry owns no browser-compat-data keys' : item.compat_keys.map(markdownText).join(', ')}`,
+          `**compat_keys:** ${formatBatchCompatKeys(item.compat_keys, item.compat_keys_total ?? item.compat_keys.length, item.resolved_as?.baseline_id ?? item.input)}`,
         );
       }
       if (item.guidance) lines.push(markdownText(item.guidance));
     }
+    if (result.omitted_features) lines.push('', formatOmittedFeatures(result.omitted_features));
     return [{ type: 'text', text: lines.join('\n') }];
   },
 });

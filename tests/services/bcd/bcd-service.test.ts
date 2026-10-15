@@ -8,12 +8,13 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { getBaselineService } from '@/services/baseline/baseline-service.js';
 import { BcdService, getBcdService } from '@/services/bcd/bcd-service.js';
 
 describe('BcdService — real bundled data', () => {
-  it('indexes 20,647 leaves across the 12 documented namespaces', async () => {
+  it('indexes 20,696 leaves across the 12 documented namespaces', async () => {
     const bcd = await getBcdService();
-    expect(bcd.leafCount).toBe(20_647);
+    expect(bcd.leafCount).toBe(20_696);
     expect([...bcd.namespaces]).toEqual([
       'api',
       'css',
@@ -28,8 +29,8 @@ describe('BcdService — real bundled data', () => {
       'webdriver',
       'webextensions',
     ]);
-    expect(bcd.namespaceLeafCount('api')).toBe(10_263);
-    expect(bcd.namespaceLeafCount('css')).toBe(4_175);
+    expect(bcd.namespaceLeafCount('api')).toBe(10_267);
+    expect(bcd.namespaceLeafCount('css')).toBe(4_212);
     expect(bcd.namespaceLeafCount('webextensions')).toBe(2_075);
   });
 
@@ -377,6 +378,59 @@ describe('BcdService#supportAt — real leaves, verdict-by-verdict (per Core Mec
     const result = bcd.supportAt(leaf!, 'not_a_real_browser', 0);
     expect(result.verdict).toBe('unknown');
   });
+
+  /** The statement each verdict below is read from is the one compare_support's failing rows report (#27). */
+  it.each([
+    {
+      label:
+        'api.Element.matches [edge 12]: two alternative names tie and the first BCD lists wins',
+      key: 'api.Element.matches',
+      browser: 'edge',
+      version: '12',
+      expected: {
+        verdict: 'prefixed',
+        detail: { version_added: '12', alternative_name: 'webkitMatchesSelector' },
+      },
+    },
+    {
+      label: 'css.properties.backdrop-filter [safari 15]: the -webkit- statement since 9',
+      key: 'css.properties.backdrop-filter',
+      browser: 'safari',
+      version: '15',
+      expected: { verdict: 'prefixed', detail: { version_added: '9', prefix: '-webkit-' } },
+    },
+    {
+      label: 'css.properties.font-smooth [chrome 120]: an alternative name',
+      key: 'css.properties.font-smooth',
+      browser: 'chrome',
+      version: '120',
+      expected: {
+        verdict: 'prefixed',
+        detail: { version_added: '5', alternative_name: '-webkit-font-smoothing' },
+      },
+    },
+    {
+      label: 'api.AudioTrack [firefox 140]: the preference flag',
+      key: 'api.AudioTrack',
+      browser: 'firefox',
+      version: '140',
+      expected: {
+        verdict: 'flagged',
+        detail: {
+          version_added: '33',
+          flags: [{ name: 'media.track.enabled', type: 'preference', value_to_set: 'true' }],
+        },
+      },
+    },
+  ])('$label', async ({ key, browser, version, expected }) => {
+    const bcd = await getBcdService();
+    const leaf = bcd.leaf(key);
+    expect(leaf).toBeDefined();
+    const resolved = bcd.resolveTargetVersion(browser, version);
+    expect(resolved).toMatchObject({ resolved: true, version });
+    if (!resolved.resolved) throw new Error(`${browser} ${version} must resolve`);
+    expect(bcd.supportAt(leaf!, browser, resolved.index)).toEqual(expected);
+  });
 });
 
 describe('BcdService#supportRows', () => {
@@ -397,6 +451,97 @@ describe('BcdService#supportRows', () => {
       verdict: 'unsupported',
     });
   });
+
+  it('#27: css.properties.backdrop-filter [safari] keeps its row and lists the -webkit- statement beside it', async () => {
+    const bcd = await getBcdService();
+    const [row] = bcd.supportRows(bcd.leaf('css.properties.backdrop-filter')!, ['safari']);
+    expect(row).toEqual({
+      browser_id: 'safari',
+      browser_name: 'Safari',
+      verdict: 'supported',
+      version_added: '18',
+      other_statements: [{ version_added: '9', prefix: '-webkit-' }],
+    });
+  });
+
+  it('#27: css.properties.user-select [safari]: the winner sits mid-list, and the rest keep BCD order around it', async () => {
+    const bcd = await getBcdService();
+    const leaf = bcd.leaf('css.properties.user-select')!;
+    expect(leaf.support.safari).toEqual([
+      { version_added: 'preview' },
+      { version_added: '3', prefix: '-webkit-' },
+      { version_added: '2', version_removed: '3', version_last: '2', prefix: '-khtml-' },
+    ]);
+    const [row] = bcd.supportRows(leaf, ['safari']);
+    expect(row).toEqual({
+      browser_id: 'safari',
+      browser_name: 'Safari',
+      verdict: 'prefixed',
+      version_added: '3',
+      prefix: '-webkit-',
+      other_statements: [
+        { version_added: 'preview' },
+        { version_added: '2', version_removed: '3', version_last: '2', prefix: '-khtml-' },
+      ],
+    });
+  });
+
+  it('#27: a browser with one statement carries no other_statements', async () => {
+    const bcd = await getBcdService();
+    const rows = bcd.supportRows(bcd.leaf('css.selectors.has')!, bcd.reportedBrowserIds);
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) expect(row).not.toHaveProperty('other_statements');
+  });
+
+  it('#27: over every leaf, no statement appears both as a row and in its list, and the list keeps BCD order', async () => {
+    const bcd = await getBcdService();
+    let listed = 0;
+    for (const [, leaf] of bcd.entries()) {
+      for (const row of bcd.supportRows(leaf, bcd.reportedBrowserIds)) {
+        const entry = leaf.support[row.browser_id as keyof typeof leaf.support];
+        const statements = entry === undefined ? [] : Array.isArray(entry) ? entry : [entry];
+        const others = row.other_statements ?? [];
+        listed += others.length;
+        const behindRow =
+          row.verdict === 'unknown'
+            ? 0
+            : row.verdict === 'unsupported'
+              ? statements.filter((statement) => statement.version_added === false).length
+              : row.verdict === 'preview_only'
+                ? statements.filter((statement) => statement.version_added === 'preview').length
+                : 1;
+        expect(others.length).toBe(statements.length - behindRow);
+        if (row.other_statements !== undefined) expect(others.length).toBeGreaterThan(0);
+        const {
+          browser_id: _id,
+          browser_name: _name,
+          verdict: _verdict,
+          other_statements: _others,
+          ...own
+        } = row;
+        if (behindRow === 1) expect(others).not.toContainEqual(own);
+        /** The listed statements are a subsequence of BCD's, matched in declaration order. */
+        let cursor = 0;
+        for (const other of others) {
+          while (
+            cursor < statements.length &&
+            !(
+              (statements[cursor]?.version_added === other.version_added ||
+                statements[cursor]?.version_added === `≤${other.version_added}`) &&
+              statements[cursor]?.prefix === other.prefix &&
+              statements[cursor]?.alternative_name === other.alternative_name &&
+              statements[cursor]?.version_removed === other.version_removed
+            )
+          ) {
+            cursor += 1;
+          }
+          expect(cursor).toBeLessThan(statements.length);
+          cursor += 1;
+        }
+      }
+    }
+    expect(listed).toBeGreaterThan(1_000);
+  }, 60_000);
 });
 
 describe('BcdService#limitingBrowser (D27)', () => {
@@ -429,5 +574,124 @@ describe('BcdService#limitingBrowser (D27)', () => {
     // exercise the function directly against a core set the leaf can't fully answer.
     const result = bcd.limitingBrowser(leaf!, ['chrome', 'not_a_real_browser']);
     expect(result).toBeUndefined();
+  });
+
+  it('#30 keeps the ≤ bound of api.FileSystem visible as version_is_upper_bound', async () => {
+    const bcd = await getBcdService();
+    const baselineService = await getBaselineService();
+    const leaf = bcd.leaf('api.FileSystem');
+    expect(leaf?.support.edge).toMatchObject({ version_added: '≤18' });
+    expect(bcd.limitingBrowser(leaf!, baselineService.coreBrowserIds)).toEqual({
+      browser_id: 'edge',
+      name: 'Edge',
+      version: '18',
+      version_is_upper_bound: true,
+    });
+  });
+});
+
+describe('BcdService#featureLimitingBrowser — web-features status.support (#26)', () => {
+  const limitingFor = async (id: string) => {
+    const [bcd, baseline] = await Promise.all([getBcdService(), getBaselineService()]);
+    const support = baseline.featureSupport(id);
+    expect(support).toBeDefined();
+    return bcd.featureLimitingBrowser(support!, baseline.coreBrowserIds);
+  };
+
+  it('picks the listed version with the newest release date once all seven are listed', async () => {
+    expect(await limitingFor('grid')).toEqual({ browser_id: 'edge', name: 'Edge', version: '16' });
+    expect(await limitingFor('popover')).toEqual({
+      browser_id: 'safari_ios',
+      name: 'Safari on iOS',
+      version: '18.3',
+    });
+  });
+
+  it('is undefined while any core browser is unlisted', async () => {
+    expect(await limitingFor('anchor-positioning')).toBeUndefined();
+    expect(await limitingFor('display-contents')).toBeUndefined();
+  });
+
+  it('flags a ≤ listing as an upper bound when it limits, through the same rule as a key', async () => {
+    const [bcd, baseline] = await Promise.all([getBcdService(), getBaselineService()]);
+    const ranged = { ...baseline.featureSupport('grid'), edge: '≤18' };
+    expect(bcd.featureLimitingBrowser(ranged, baseline.coreBrowserIds)).toEqual({
+      browser_id: 'edge',
+      name: 'Edge',
+      version: '18',
+      version_is_upper_bound: true,
+    });
+  });
+
+  it('matches limitingBrowser for a single-key feature whose listing equals its key', async () => {
+    const [bcd, baseline] = await Promise.all([getBcdService(), getBaselineService()]);
+    const firefox121 = { browser_id: 'firefox', name: 'Firefox', version: '121' };
+    expect(
+      bcd.featureLimitingBrowser(baseline.featureSupport('has')!, baseline.coreBrowserIds),
+    ).toStrictEqual(firefox121);
+    expect(
+      bcd.limitingBrowser(bcd.leaf('css.selectors.has')!, baseline.coreBrowserIds),
+    ).toStrictEqual(firefox121);
+  });
+
+  it('dates a listed release through the same trailing-zero rule as a target token', async () => {
+    const [bcd, baseline] = await Promise.all([getBcdService(), getBaselineService()]);
+    // BCD records edge "16"; a listing spelled "16.0" must still date to it and limit.
+    const respelled = { ...baseline.featureSupport('grid'), edge: '16.0' };
+    expect(bcd.featureLimitingBrowser(respelled, baseline.coreBrowserIds)).toStrictEqual({
+      browser_id: 'edge',
+      name: 'Edge',
+      version: '16.0',
+    });
+  });
+});
+
+describe('BcdService#featureSupportAt — a target judged on web-features status.support (#26)', () => {
+  const judge = async (id: string, browser: string, token: string) => {
+    const [bcd, baseline] = await Promise.all([getBcdService(), getBaselineService()]);
+    const target = bcd.resolveTargetVersion(browser, token);
+    if (!target.resolved) throw new Error(`${browser} ${token} must resolve`);
+    return bcd.featureSupportAt(
+      baseline.featureSupport(id)!,
+      baseline.coreBrowserIds,
+      browser,
+      target.index,
+    );
+  };
+
+  it('supported at and after the listed release, before_feature_support before it', async () => {
+    expect(await judge('popover', 'chrome', '116')).toBe('supported');
+    expect(await judge('popover', 'chrome', '140')).toBe('supported');
+    expect(await judge('popover', 'chrome', '115')).toBe('before_feature_support');
+    expect(await judge('popover', 'chrome', '109')).toBe('before_feature_support');
+  });
+
+  it('resolves a listed version through the same trailing-zero rule as a target token', async () => {
+    // safari 10.1 is listed for grid; the caniuse-style token 10.1.0 maps onto it.
+    expect(await judge('grid', 'safari', '10.1.0')).toBe('supported');
+    expect(await judge('grid', 'safari', '10')).toBe('before_feature_support');
+  });
+
+  it('a target before a ≤ bound is unknown, at the bound supported', async () => {
+    expect(await judge('paint-order', 'firefox', '60')).toBe('unknown');
+    expect(await judge('paint-order', 'firefox', '66')).toBe('supported');
+    expect(await judge('paint-order', 'firefox', '67')).toBe('supported');
+  });
+
+  it('an unlisted core browser is no_feature_support at every release', async () => {
+    expect(await judge('anchor-positioning', 'chrome', '140')).toBe('no_feature_support');
+    expect(await judge('display-contents', 'safari_ios', '18.0')).toBe('no_feature_support');
+  });
+
+  it('a non-core browser is unknown even when the feature is listed everywhere it is published', async () => {
+    expect(await judge('grid', 'opera', '100')).toBe('unknown');
+    expect(await judge('grid', 'samsunginternet_android', '20.0')).toBe('unknown');
+  });
+
+  it('a target that predates every release fails an exact listing', async () => {
+    const [bcd, baseline] = await Promise.all([getBcdService(), getBaselineService()]);
+    expect(
+      bcd.featureSupportAt(baseline.featureSupport('grid')!, baseline.coreBrowserIds, 'edge', -1),
+    ).toBe('before_feature_support');
   });
 });

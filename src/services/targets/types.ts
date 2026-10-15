@@ -6,14 +6,17 @@
 
 /**
  * Why a query target was not evaluated. The first two come from mapping the
- * token onto a release; `no_bcd_data` means a compared feature records nothing
- * for the mapped browser, and `no_comparable_feature` means the call held no
- * feature that could be compared at all.
+ * token onto a release; `no_bcd_data` means a compared key records nothing for
+ * the mapped browser, `no_feature_level_data` means a feature judged on
+ * web-features' feature-level support has no answer for it (a non-core browser,
+ * or a release before a `≤` bound), and `no_comparable_feature` means the call
+ * held no feature that could be compared at all.
  */
 export type UncheckedReason =
   | 'no_bcd_browser'
   | 'unknown_version'
   | 'no_bcd_data'
+  | 'no_feature_level_data'
   | 'no_comparable_feature';
 
 /** A browserslist token that mapped onto a concrete BCD release. */

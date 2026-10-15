@@ -42,12 +42,97 @@ const BASELINE_PRIORITY: Record<BaselineState, number> = {
  * Normalize text for both the index and the query: split camelCase, lowercase,
  * drop punctuation except `-` (`<` and `>` included, so `<dialog>` keeps
  * `dialog`), then split on whitespace and dots. Markup is stripped only from
- * BCD descriptions during BCD ingestion, before they reach this function.
+ * BCD descriptions during BCD ingestion, before they reach this function. The
+ * index widens these tokens further with `indexTokens`; a query uses them as-is.
  */
 export function tokenize(value: string): string[] {
   const camelSplit = value.replace(/([a-z0-9])([A-Z])/g, '$1 $2');
   const cleaned = camelSplit.toLowerCase().replace(/[^a-z0-9\s.-]/g, ' ');
   return cleaned.split(/[\s.]+/).filter(Boolean);
+}
+
+/** Fewest characters a singular reading may keep, at index time and at query time. */
+const MIN_READING_LENGTH = 3;
+
+/** Fewest characters a query token needs before it gets singular readings. */
+const MIN_PLURAL_LENGTH = 4;
+
+/** Endings that look plural but usually are not (`class`, `status`, `axis`). */
+const NON_PLURAL_ENDINGS = ['ss', 'us', 'is'];
+
+/** Endings whose plural adds `es` rather than `s` (`boxes`, `matches`). */
+const ES_PLURAL_ENDINGS = ['ses', 'xes', 'zes', 'ches', 'shes'];
+
+/** The `-y` reading of an `-ies` word (`queries` → `query`), when it keeps three characters. */
+function iesReading(word: string): string | undefined {
+  if (!word.endsWith('ies')) return;
+  const reading = `${word.slice(0, -3)}y`;
+  return reading.length >= MIN_READING_LENGTH ? reading : undefined;
+}
+
+/**
+ * Tokenize a field for the index: every `tokenize` token, plus the parts of a
+ * hyphenated token (`custom-property` → `custom`, `property`), plus the `-y`
+ * reading of every `-ies` word among them (`queries` → `query`), appended after
+ * the `tokenize` tokens. A singular query then reaches an `-ies` plural by plain
+ * substring, and a plural query's singular reading has a whole token to equal.
+ */
+export function indexTokens(value: string): string[] {
+  const tokens = tokenize(value);
+  const extra: string[] = [];
+  for (const token of tokens) {
+    const reading = iesReading(token);
+    if (reading !== undefined) extra.push(reading);
+    if (!token.includes('-')) continue;
+    for (const part of token.split('-')) {
+      if (part === '') continue;
+      extra.push(part);
+      const partReading = iesReading(part);
+      if (partReading !== undefined) extra.push(partReading);
+    }
+  }
+  return extra.length === 0 ? tokens : tokens.concat(extra);
+}
+
+/**
+ * Singular readings of a plural-looking query token: `-ies` → `-y`,
+ * `-(s|x|z|ch|sh)es` → drop `es`, and drop `s`, each kept only at three or
+ * more characters. Only tokens of four or more characters ending in `s`, and
+ * not in `ss`, `us`, or `is`, have any.
+ */
+export function singularReadings(token: string): string[] {
+  if (token.length < MIN_PLURAL_LENGTH || !token.endsWith('s')) return [];
+  if (NON_PLURAL_ENDINGS.some((ending) => token.endsWith(ending))) return [];
+  const readings = new Set<string>();
+  const ies = iesReading(token);
+  if (ies !== undefined) readings.add(ies);
+  if (ES_PLURAL_ENDINGS.some((ending) => token.endsWith(ending))) readings.add(token.slice(0, -2));
+  readings.add(token.slice(0, -1));
+  return [...readings].filter((reading) => reading.length >= MIN_READING_LENGTH);
+}
+
+/**
+ * A query token with its singular readings and their length range, computed
+ * once per query; the range skips the equality test on field tokens that
+ * cannot equal any reading.
+ */
+interface QueryTerm {
+  maxReading: number;
+  minReading: number;
+  readings: string[];
+  token: string;
+}
+
+/** Pair a query token with its singular readings (an empty range when it has none). */
+function queryTerm(token: string): QueryTerm {
+  const readings = singularReadings(token);
+  const lengths = readings.map((reading) => reading.length);
+  return {
+    token,
+    readings,
+    minReading: Math.min(...lengths),
+    maxReading: Math.max(...lengths),
+  };
 }
 
 /**
@@ -71,12 +156,29 @@ export function querySegments(value: string): string[] {
 /** Fewest query segments the `path_suffix` tier accepts; one segment is shared too widely. */
 const MIN_SUFFIX_SEGMENTS = 2;
 
-/** True when every query token appears inside some token of the field. */
-function containsAll(fieldTokens: string[], queryTokens: string[]): boolean {
+/**
+ * True when every query term matches some token of the field: the field token
+ * contains the query token, or equals one of its singular readings. A reading
+ * never matches as a substring.
+ */
+function containsAll(fieldTokens: string[], terms: QueryTerm[]): boolean {
   if (fieldTokens.length === 0) return false;
-  return queryTokens.every((queryToken) =>
-    fieldTokens.some((fieldToken) => fieldToken.includes(queryToken)),
-  );
+  for (const { token, readings, minReading, maxReading } of terms) {
+    let matched = false;
+    for (const fieldToken of fieldTokens) {
+      if (
+        fieldToken.includes(token) ||
+        (fieldToken.length >= minReading &&
+          fieldToken.length <= maxReading &&
+          readings.includes(fieldToken))
+      ) {
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) return false;
+  }
+  return true;
 }
 
 /** Ranked, filterable index over every searchable entity. */
@@ -128,7 +230,9 @@ export class SearchService {
   /**
    * Rank every matching row. Tier 1 and 2 are exact matches (tier 2 includes a
    * BCD key whose trailing segments equal the query's); tiers 3 to 6 widen from
-   * name to last path segment to description to the whole path. Within a tier:
+   * name to last path segment to description to the whole path, each query
+   * token matching a field token by substring or by a singular reading that
+   * equals it (`containsAll`), so a plural and its singular meet. Within a tier:
    * shorter BCD path, then namespace priority, then Baseline, then key.
    */
   rank(query: string, filters: SearchFilters): SearchHit[] {
@@ -176,24 +280,25 @@ export class SearchService {
       }
     }
 
+    const terms = queryTokens.map(queryTerm);
     for (const row of this.rows) {
-      if (containsAll(row.nameTokens, queryTokens)) {
+      if (containsAll(row.nameTokens, terms)) {
         consider(row, 3, 'name');
         continue;
       }
-      if (containsAll(row.lastSegmentTokens, queryTokens)) {
+      if (containsAll(row.lastSegmentTokens, terms)) {
         consider(row, 4, 'path_segment');
         continue;
       }
-      if (containsAll(row.descriptionTokens, queryTokens)) {
+      if (containsAll(row.descriptionTokens, terms)) {
         consider(row, 5, 'description');
         continue;
       }
-      if (containsAll(row.caniuseTitleTokens, queryTokens)) {
+      if (containsAll(row.caniuseTitleTokens, terms)) {
         consider(row, 5, 'caniuse_title');
         continue;
       }
-      if (containsAll(row.pathTokens, queryTokens)) consider(row, 6, 'path_tokens');
+      if (containsAll(row.pathTokens, terms)) consider(row, 6, 'path_tokens');
     }
 
     return [...best.values()].sort((a, b) => {
@@ -271,11 +376,11 @@ async function loadSearchService(): Promise<SearchService> {
       baseline_state: baseline.baselineForKey(key).state,
       namespace: segments[0] as string,
       pathSegmentCount: segments.length,
-      nameTokens: feature?.name === undefined ? [] : tokenize(feature.name),
-      descriptionTokens: description === undefined ? [] : tokenize(description),
-      caniuseTitleTokens: caniuseTitle === undefined ? [] : tokenize(caniuseTitle),
-      lastSegmentTokens: tokenize(segments[segments.length - 1] as string),
-      pathTokens: tokenize(key),
+      nameTokens: feature?.name === undefined ? [] : indexTokens(feature.name),
+      descriptionTokens: description === undefined ? [] : indexTokens(description),
+      caniuseTitleTokens: caniuseTitle === undefined ? [] : indexTokens(caniuseTitle),
+      lastSegmentTokens: indexTokens(segments[segments.length - 1] as string),
+      pathTokens: indexTokens(key),
       groups: groupsFor(feature),
       snapshots: [...(feature?.snapshot ?? [])],
     });
@@ -298,11 +403,11 @@ async function loadSearchService(): Promise<SearchService> {
       ...(caniuseTitle === undefined ? {} : { caniuse_title: caniuseTitle }),
       baseline_state: baseline.baselineForFeature(id)?.state ?? 'not_mapped',
       pathSegmentCount: 1,
-      nameTokens: tokenize(entry.name),
-      descriptionTokens: tokenize(entry.description),
-      caniuseTitleTokens: caniuseTitle === undefined ? [] : tokenize(caniuseTitle),
-      lastSegmentTokens: tokenize(id),
-      pathTokens: tokenize(id),
+      nameTokens: indexTokens(entry.name),
+      descriptionTokens: indexTokens(entry.description),
+      caniuseTitleTokens: caniuseTitle === undefined ? [] : indexTokens(caniuseTitle),
+      lastSegmentTokens: indexTokens(id),
+      pathTokens: indexTokens(id),
       groups: groupsFor(entry),
       snapshots: [...(entry.snapshot ?? [])],
     });

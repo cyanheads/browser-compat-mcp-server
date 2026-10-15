@@ -15,6 +15,7 @@
 import { readdirSync } from 'node:fs';
 import { sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { z } from '@cyanheads/mcp-ts-core';
 import { describe, expect, it } from 'vitest';
 import { browsercompatCheckBaseline } from '@/mcp-server/tools/definitions/browsercompat-check-baseline.tool.js';
 import { browsercompatCompareSupport } from '@/mcp-server/tools/definitions/browsercompat-compare-support.tool.js';
@@ -32,6 +33,39 @@ const REGISTERED_TOOLS = [
 ];
 
 describe('tools/list surface', () => {
+  it('advertises the per-call caps below their hard ceilings (#29) and compat_keys paging (#25)', () => {
+    const properties = (schema: z.ZodType) =>
+      (z.toJSONSchema(schema) as { properties: Record<string, Record<string, unknown>> })
+        .properties;
+    for (const tool of [browsercompatCheckBaseline, browsercompatCompareSupport]) {
+      expect(properties(tool.input).features).toMatchObject({ minItems: 1, maxItems: 100 });
+    }
+    expect(properties(browsercompatSearchFeatures.input).limit).toMatchObject({
+      minimum: 1,
+      maximum: 1000,
+    });
+    expect(properties(browsercompatCompareSupport.input).target_limit).toMatchObject({
+      type: 'integer',
+      minimum: 1,
+      maximum: 1000,
+      default: 10,
+    });
+    expect(properties(browsercompatGetFeature.input).compat_keys_offset).toMatchObject({
+      type: 'integer',
+      minimum: 0,
+      default: 0,
+    });
+    for (const field of ['compat_keys_total', 'compat_keys_next_offset']) {
+      expect(properties(browsercompatGetFeature.output)[field]).toMatchObject({ type: 'integer' });
+    }
+    for (const tool of [browsercompatCheckBaseline, browsercompatCompareSupport]) {
+      expect(properties(tool.output).omitted_features).toMatchObject({
+        type: 'array',
+        items: { type: 'string' },
+      });
+    }
+  });
+
   it('advertises direct-child paging with a default zero offset and rejects invalid offsets', () => {
     expect(browsercompatGetFeature.input.parse({ feature: 'api.Element' }).subkeys_offset).toBe(0);
     expect(
@@ -56,7 +90,7 @@ describe('tools/list surface', () => {
       { target_offset: 0.5 },
       { target_offset: '10' },
       { target_limit: 0 },
-      { target_limit: 11 },
+      { target_limit: 1001 },
       { target_limit: 2.5 },
     ]) {
       expect(browsercompatCompareSupport.input.safeParse({ ...base, ...paging }).success).toBe(

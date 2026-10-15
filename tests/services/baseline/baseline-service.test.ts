@@ -138,6 +138,65 @@ describe('BaselineService#compatKeys / caniuseIds / discouraged', () => {
   });
 });
 
+describe('BaselineService#featureSupport / featureSupportRows — status.support (#26)', () => {
+  it('featureSupport returns the feature-level status.support verbatim', async () => {
+    const baseline = await getBaselineService();
+    expect(baseline.featureSupport('grid')).toEqual({
+      chrome: '57',
+      chrome_android: '57',
+      edge: '16',
+      firefox: '52',
+      firefox_android: '52',
+      safari: '10.1',
+      safari_ios: '10.3',
+    });
+    expect(baseline.featureSupport('display-contents')).toEqual({});
+  });
+
+  it('featureSupport is undefined for a redirect entry and an unknown id', async () => {
+    const baseline = await getBaselineService();
+    expect(baseline.featureSupport('display-grid-lanes')).toBeUndefined();
+    expect(baseline.featureSupport('not-a-real-feature-id')).toBeUndefined();
+  });
+
+  it('featureSupportRows has one row per core browser, in core order, with ≤ bounds split out', async () => {
+    const baseline = await getBaselineService();
+    expect(baseline.featureSupportRows('paint-order')).toEqual([
+      { browser_id: 'chrome', supported: true, version: '123' },
+      { browser_id: 'chrome_android', supported: true, version: '123' },
+      { browser_id: 'edge', supported: true, version: '123' },
+      { browser_id: 'firefox', supported: true, version: '66', version_is_upper_bound: true },
+      {
+        browser_id: 'firefox_android',
+        supported: true,
+        version: '66',
+        version_is_upper_bound: true,
+      },
+      { browser_id: 'safari', supported: true, version: '12', version_is_upper_bound: true },
+      { browser_id: 'safari_ios', supported: true, version: '12', version_is_upper_bound: true },
+    ]);
+  });
+
+  it('an unlisted core browser is a supported: false row with no version', async () => {
+    const baseline = await getBaselineService();
+    const unlisted = (browser_id: string) => ({ browser_id, supported: false });
+    expect(baseline.featureSupportRows('anchor-positioning')).toStrictEqual([
+      unlisted('chrome'),
+      unlisted('chrome_android'),
+      unlisted('edge'),
+      unlisted('firefox'),
+      unlisted('firefox_android'),
+      { browser_id: 'safari', supported: true, version: '27' },
+      { browser_id: 'safari_ios', supported: true, version: '27' },
+    ]);
+    expect(baseline.featureSupportRows('display-contents')).toStrictEqual(
+      baseline.coreBrowserIds.map(unlisted),
+    );
+    expect(baseline.coreBrowserIds).toHaveLength(7);
+    expect(baseline.featureSupportRows('display-grid-lanes')).toBeUndefined();
+  });
+});
+
 describe('BaselineService — groups, snapshots, core browsers', () => {
   it('exposes 104 groups and 11 ECMAScript snapshots', async () => {
     const baseline = await getBaselineService();

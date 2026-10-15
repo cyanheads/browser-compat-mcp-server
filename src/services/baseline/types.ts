@@ -28,6 +28,18 @@ export interface WebFeatureStatus {
   support?: Record<string, string>;
 }
 
+/**
+ * One core browser in web-features' feature-level `status.support`. A listed
+ * browser carries the release, with a `≤` prefix split out into the flag; an
+ * unlisted one is `supported: false`.
+ */
+export interface FeatureSupportRow {
+  browser_id: string;
+  supported: boolean;
+  version?: string;
+  version_is_upper_bound?: boolean;
+}
+
 /** Why a feature is discouraged, straight from web-features. */
 export interface DiscouragedInfo {
   according_to: string[];

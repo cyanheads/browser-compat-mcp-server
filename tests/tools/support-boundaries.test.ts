@@ -209,7 +209,7 @@ describe('#16 child-index and page boundaries', () => {
     const result = await runToolContract(browsercompatGetFeature, { feature });
     expect(result.structuredContent).not.toHaveProperty('subkeys');
   });
-  it.each([-1, 0.5, '100', null])(
+  it.each([-1, 0.5, 'ten', true])(
     'rejects invalid offset %j at the assembled schema boundary',
     async (subkeys_offset) => {
       const result = await runToolContract(browsercompatGetFeature, {
@@ -268,18 +268,27 @@ describe('#9/#11 ingestion and unavailable metadata', () => {
     const plain = await runToolContract(browsercompatGetFeature, { feature: 'solo' });
     expect(plain.structuredContent).toHaveProperty('description', 'Plain <textarea> &amp;lt;');
   });
-  it('renders only preview metadata with no invented release fields', async () => {
+  it('renders only preview metadata on the row, with no invented release fields', async () => {
     const result = await runToolContract(browsercompatGetFeature, { feature: 'api.Preview' });
     const output = browsercompatGetFeature.output.parse(result.structuredContent);
+    // The false statement's notes stay off the row; #27 lists that statement beside it.
     expect(output.support?.[0]).toEqual({
       browser_id: 'chrome',
       browser_name: 'Chrome',
       verdict: 'preview_only',
       notes: ['<input>'],
       impl_url: ['https://example.test/preview'],
+      other_statements: [{ notes: ['wrong verdict'] }],
     });
-    expect(JSON.stringify(result.content)).toContain('&lt;input&gt;');
-    expect(JSON.stringify(result.content)).toContain('https://example.test/preview');
-    expect(JSON.stringify(result.content)).not.toContain('wrong verdict');
+    const text = result.content.flatMap((block) => (block.type === 'text' ? [block.text] : []));
+    expect(text.join('\n')).toContain(
+      [
+        '- **Chrome** (chrome): preview_only',
+        '  - notes: &lt;input&gt;',
+        '  - impl_url: <https://example.test/preview>',
+        '  - other_statements (1):',
+        '    - notes wrong verdict',
+      ].join('\n'),
+    );
   });
 });

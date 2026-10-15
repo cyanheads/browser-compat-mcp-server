@@ -1,7 +1,8 @@
 /**
  * @fileoverview Baseline service — the web-features feature map, the
- * `by_compat_key` index that is the authority for per-key Baseline state, the
- * redirect map for moved and split entries, groups, and snapshots.
+ * `by_compat_key` index that is the authority for per-key Baseline state, each
+ * feature's own core-browser `status.support`, the redirect map for moved and
+ * split entries, groups, and snapshots.
  * @module services/baseline/baseline-service
  */
 
@@ -9,6 +10,7 @@ import type {
   BaselineInfo,
   BaselineState,
   DiscouragedInfo,
+  FeatureSupportRow,
   RawBaseline,
   WebFeature,
   WebFeatureEntry,
@@ -111,6 +113,32 @@ export class BaselineService {
   baselineForFeature(id: string): BaselineInfo | undefined {
     const feature = this.feature(id);
     return feature ? baselineFrom(feature.status) : undefined;
+  }
+
+  /**
+   * web-features' feature-level `status.support` — the core-browser releases
+   * feature-level Baseline is computed from — when the id names a real feature.
+   */
+  featureSupport(id: string): Record<string, string> | undefined {
+    const feature = this.feature(id);
+    return feature ? { ...feature.status.support } : undefined;
+  }
+
+  /** `featureSupport` as one row per core browser, in core order, with `≤` split into a flag. */
+  featureSupportRows(id: string): FeatureSupportRow[] | undefined {
+    const support = this.featureSupport(id);
+    if (!support) return undefined;
+    return this.coreBrowserIds.map((browserId) => {
+      const listed = support[browserId];
+      if (listed === undefined) return { browser_id: browserId, supported: false };
+      const isUpperBound = listed.startsWith('≤');
+      return {
+        browser_id: browserId,
+        supported: true,
+        version: isUpperBound ? listed.slice(1) : listed,
+        ...(isUpperBound ? { version_is_upper_bound: true } : {}),
+      };
+    });
   }
 
   /** The BCD keys a feature owns, in declaration order. */

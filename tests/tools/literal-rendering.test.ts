@@ -12,6 +12,7 @@ import { browsercompatListReference } from '@/mcp-server/tools/definitions/brows
 import { browsercompatSearchFeatures } from '@/mcp-server/tools/definitions/browsercompat-search-features.tool.js';
 import { formatSupportRow } from '@/mcp-server/tools/definitions/compat-shapes.js';
 import { getDataVersion } from '@/services/data-version/data-version-service.js';
+import { markdownText } from '@/utils/markdown-text.js';
 
 const literal = '<dialog> **literal** [label](https://example.test/a_b?q=1&x=2) `tick` | &lt;';
 const escaped = '&lt;dialog&gt; \\*\\*literal\\*\\* \\[label\\]';
@@ -95,6 +96,23 @@ describe('#9 literal rendering', () => {
       expect(text).not.toContain('<dialog>');
     }
     expect(JSON.stringify(result.structuredContent)).toContain('<dialog>');
+  });
+
+  it('renders omitted_features as one code span holding the entries verbatim (#29)', async () => {
+    const omitted = [literal, 'line\nbreak'];
+    const features = [...Array(20).fill('has'), ...omitted];
+    for (const result of [
+      await runToolContract(browsercompatCheckBaseline, { features }),
+      await runToolContract(browsercompatCompareSupport, { features, targets: 'chrome 120' }),
+    ]) {
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toHaveProperty('omitted_features', omitted);
+      const text = result.content.filter((b) => b.type === 'text')[0]?.text ?? '';
+      const line = text.split('\n').find((row) => row.startsWith('**omitted_features:**'));
+      expect(line).toBe(
+        `**omitted_features:** 2 entries past the first 20 were not evaluated — call again with features set to \`\`${JSON.stringify(omitted)}\`\``,
+      );
+    }
   });
 
   it('escapes search filters, empty-result notices, and result descriptions', async () => {
@@ -201,10 +219,23 @@ describe('#9 literal rendering', () => {
                     version_token: literal,
                     bcd_browser: literal,
                     bcd_version: literal,
-                    verdict: 'unsupported' as const,
+                    verdict: 'prefixed' as const,
+                    version_added: literal,
+                    prefix: literal,
+                    alternative_name: literal,
+                    flags: [{ name: literal, type: 'preference' as const, value_to_set: literal }],
                   },
                 ],
                 failing_total: 1,
+                failing_ranges: [
+                  {
+                    agent: literal,
+                    newest: literal,
+                    oldest: `${literal} old`,
+                    count: 1,
+                    verdict: 'prefixed' as const,
+                  },
+                ],
                 evaluated_total: 1,
                 evaluated_coverage_percent: 1,
                 unchecked_total: 1,
@@ -228,6 +259,15 @@ describe('#9 literal rendering', () => {
     expect(texts[0]).toContain(`| ${escaped}`);
     expect(texts[0]).toContain(`  - fails on ${escaped}`);
     expect(texts[0]).toContain(`  - not evaluated on ${escaped}`);
+    // #27 statement fields and #28 runs render every literal escaped, each exactly once.
+    const full = markdownText(literal);
+    const lines = texts[0]?.split('\n') ?? [];
+    expect(lines).toContain(
+      `  - fails on ${full} ${full} → ${full} ${full} (prefixed) · version_added ${full} · prefix ${full} · alternative_name ${full} · flags preference ${full} value_to_set ${full}`,
+    );
+    expect(lines).toContain(
+      `  - failing_ranges (whole query): ${full} ${full} to ${markdownText(`${literal} old`)}: 1 prefixed`,
+    );
     expect(texts[0]?.split('<dialog>')).toHaveLength(1);
   });
 
@@ -238,7 +278,12 @@ describe('#9 literal rendering', () => {
       verdict: 'flagged',
       flags: [{ name: literal, type: 'preference', value_to_set: literal }],
       notes: [literal],
+      other_statements: [{ version_added: literal, prefix: literal, notes: [literal] }],
     }).join('\n');
+    const full = markdownText(literal);
+    expect(text).toContain(
+      `  - other_statements (1):\n    - version_added ${full} · prefix ${full} · notes ${full}`,
+    );
     expect(text).toContain(escaped);
     expect(text).not.toContain('<dialog>');
     expect(text).toContain('&amp;lt;');

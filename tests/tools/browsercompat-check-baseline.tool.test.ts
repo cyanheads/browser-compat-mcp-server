@@ -6,10 +6,16 @@
  */
 
 import { JsonRpcErrorCode } from '@cyanheads/mcp-ts-core/errors';
-import { createMockContext, getEnrichment } from '@cyanheads/mcp-ts-core/testing';
+import { createMockContext, getEnrichment, runToolContract } from '@cyanheads/mcp-ts-core/testing';
 import { describe, expect, it } from 'vitest';
 import { browsercompatCheckBaseline } from '@/mcp-server/tools/definitions/browsercompat-check-baseline.tool.js';
+import { formatOmittedFeatures } from '@/mcp-server/tools/definitions/compat-shapes.js';
 import { getBaselineService } from '@/services/baseline/baseline-service.js';
+
+/** Every text block of an assembled result, joined. */
+function textOf(result: Awaited<ReturnType<typeof runToolContract>>): string {
+  return result.content.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('\n');
+}
 
 async function run(features: string[], resolve = false) {
   const ctx = createMockContext({ errors: browsercompatCheckBaseline.errors });
@@ -151,7 +157,7 @@ describe('browsercompat_check_baseline — all_widely_available (D30)', () => {
 describe('browsercompat_check_baseline — enrichment', () => {
   it('always echoes data_version and totalCount', async () => {
     const { ctx, result } = await run(['has', 'intersection-observer-v2']);
-    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.3' });
+    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.5' });
     expect(getEnrichment(ctx).totalCount).toBe(2);
     expect(result.results).toHaveLength(2);
   });
@@ -180,6 +186,75 @@ describe('browsercompat_check_baseline — enrichment', () => {
   });
 });
 
+describe('browsercompat_check_baseline — limiting_browser for multi-key ids (#26) and ≤ bounds (#30)', () => {
+  it('grid: Edge 16 from web-features’ feature-level support, compat_keys retained, no feature_support', async () => {
+    const result = await runToolContract(browsercompatCheckBaseline, { features: ['grid'] });
+    expect(result.isError).not.toBe(true);
+    const [grid] = browsercompatCheckBaseline.output.parse(result.structuredContent).results;
+    expect(grid?.limiting_browser).toStrictEqual({
+      browser_id: 'edge',
+      name: 'Edge',
+      version: '16',
+    });
+    expect(grid?.compat_keys).toHaveLength(10);
+    expect(grid?.compat_keys_total).toBe(61);
+    // Checked on the raw structuredContent: the output parse would strip an undeclared field.
+    expect(result.structuredContent).not.toHaveProperty('results.0.feature_support');
+    const text = textOf(result);
+    expect(text.split('\n')).toContain(
+      '**Limiting browser:** Edge (edge) 16 — web-features lists every core browser for the feature as a whole',
+    );
+    expect(text).not.toContain('feature_support');
+  });
+
+  it('a zero-key id has no limiting_browser', async () => {
+    const { result } = await run(['http2']);
+    expect(result.results[0]).toMatchObject({ outcome: 'no_compat_data', compat_keys: [] });
+    expect(result.results[0]).not.toHaveProperty('limiting_browser');
+  });
+
+  it('api.FileSystem keeps Edge’s ≤18 bound on both surfaces', async () => {
+    const result = await runToolContract(browsercompatCheckBaseline, {
+      features: ['api.FileSystem', 'css.selectors.has'],
+    });
+    const [fileSystem, has] = browsercompatCheckBaseline.output.parse(
+      result.structuredContent,
+    ).results;
+    expect(fileSystem?.limiting_browser).toEqual({
+      browser_id: 'edge',
+      name: 'Edge',
+      version: '18',
+      version_is_upper_bound: true,
+    });
+    expect(has?.limiting_browser).not.toHaveProperty('version_is_upper_bound');
+    const text = textOf(result);
+    expect(text).toContain(
+      '**Limiting browser:** Edge (edge) 18 · version_is_upper_bound true — full support in every core browser',
+    );
+    expect(text).toContain(
+      '**Limiting browser:** Firefox (firefox) 121 — full support in every core browser',
+    );
+  });
+
+  it('a multi-key id whose feature-level limiting release is ≤ keeps the bound', async () => {
+    const result = await runToolContract(browsercompatCheckBaseline, {
+      features: ['opacity-svg'],
+    });
+    expect(
+      browsercompatCheckBaseline.output.parse(result.structuredContent).results[0]
+        ?.limiting_browser,
+    ).toEqual({
+      browser_id: 'safari',
+      name: 'Safari',
+      version: '13.1',
+      version_is_upper_bound: true,
+    });
+    expect(textOf(result).split('\n')).toContain(
+      '**Limiting browser:** Safari (safari) 13.1 · version_is_upper_bound true — web-features lists every core browser for the feature as a whole',
+    );
+  });
+});
+
 describe('browsercompat_check_baseline — resolve: true', () => {
   it('resolves an unambiguous punctuated alias per-entry', async () => {
     const { result } = await run([':has()'], true);
@@ -199,8 +274,13 @@ describe('browsercompat_check_baseline — resolve: true', () => {
       resolved_as: { bcd_key: null, baseline_id: 'container-queries', resolved_via: 'search' },
       baseline: baseline.baselineForFeature('container-queries'),
     });
-    expect(containers?.compat_keys).toHaveLength(12);
-    expect(containers?.limiting_browser).toBeUndefined();
+    expect(containers?.compat_keys).toHaveLength(10);
+    expect(containers?.compat_keys_total).toBe(12);
+    expect(containers?.limiting_browser).toEqual({
+      browser_id: 'firefox',
+      name: 'Firefox',
+      version: '110',
+    });
     expect(layers).toMatchObject({
       resolved_as: { baseline_id: 'cascade-layers' },
       baseline: baseline.baselineForFeature('cascade-layers'),
@@ -214,13 +294,15 @@ describe('browsercompat_check_baseline — schema and error boundaries', () => {
     expect(browsercompatCheckBaseline.input.safeParse({ features: [] }).success).toBe(false);
   });
 
-  it('rejects an array over the 20-entry cap at the schema boundary', () => {
+  it('rejects an array over the 100-entry ceiling at the schema boundary', () => {
     expect(
-      browsercompatCheckBaseline.input.safeParse({ features: Array(21).fill('has') }).success,
+      browsercompatCheckBaseline.input.safeParse({ features: Array(101).fill('has') }).success,
     ).toBe(false);
-    expect(
-      browsercompatCheckBaseline.input.safeParse({ features: Array(20).fill('has') }).success,
-    ).toBe(true);
+    for (const length of [21, 100]) {
+      expect(
+        browsercompatCheckBaseline.input.safeParse({ features: Array(length).fill('has') }).success,
+      ).toBe(true);
+    }
   });
 
   it('rejects an empty and an over-200-character entry at the schema boundary', () => {
@@ -265,5 +347,118 @@ describe('browsercompat_check_baseline — format()', () => {
     expect(text).toContain('## Intersection observer visibility tracking');
     expect(text).toContain('none — this entry owns no browser-compat-data keys');
     expect(text).toContain('## nope-xyz');
+  });
+});
+
+/** Parse an assembled result through the production output schema, with its text. */
+async function contract(features: string[]) {
+  const result = await runToolContract(browsercompatCheckBaseline, { features });
+  expect(result.isError).not.toBe(true);
+  return {
+    result,
+    output: browsercompatCheckBaseline.output.parse(result.structuredContent),
+    text: textOf(result),
+  };
+}
+
+const serializedBytes = (result: Awaited<ReturnType<typeof runToolContract>>) =>
+  Buffer.byteLength(
+    JSON.stringify({ content: result.content, structuredContent: result.structuredContent }),
+  );
+
+describe('browsercompat_check_baseline — compat_keys per result (#25)', () => {
+  it('grid carries its first 10 keys with total 61 and a pointer naming the resolved id; promise carries all 10', async () => {
+    const baseline = await getBaselineService();
+    // "Grid" resolves to the id "grid"; the pointer must name the id, not the input.
+    const { output, text } = await contract(['Grid', 'promise']);
+    const [grid, promise] = output.results;
+    const gridKeys = baseline.compatKeys('grid').slice(0, 10);
+    const promiseKeys = baseline.compatKeys('promise');
+    expect(grid?.resolved_as?.baseline_id).toBe('grid');
+    expect(grid?.compat_keys).toEqual(gridKeys);
+    expect(grid?.compat_keys_total).toBe(61);
+    expect(promiseKeys).toHaveLength(10);
+    expect(promise?.compat_keys).toEqual(promiseKeys);
+    expect(promise?.compat_keys_total).toBe(10);
+    const lines = text.split('\n');
+    expect(lines).toContain(
+      `**compat_keys:** 10 of 61: ${gridKeys.join(', ')} — call browsercompat_get_feature with grid for all 61`,
+    );
+    expect(lines).toContain(`**compat_keys:** 10 of 10: ${promiseKeys.join(', ')}`);
+  });
+
+  it('a repeated entry keeps its own result with the same slice, and 20 × svg stays under 40,000 bytes', async () => {
+    const { output, result } = await contract(Array(20).fill('svg'));
+    expect(output.results).toHaveLength(20);
+    for (const item of output.results) {
+      expect(item.compat_keys).toHaveLength(10);
+      expect(item.compat_keys_total).toBe(614);
+    }
+    expect(serializedBytes(result)).toBeLessThanOrEqual(40_000);
+  });
+
+  it('a zero-key id carries an empty list with total 0; a single key carries neither field', async () => {
+    const { output, result } = await contract(['http2', 'has', 'css.selectors.has']);
+    expect(output.results[0]).toMatchObject({ compat_keys: [], compat_keys_total: 0 });
+    for (const index of [1, 2]) {
+      expect(result.structuredContent).not.toHaveProperty(`results.${index}.compat_keys`);
+      expect(result.structuredContent).not.toHaveProperty(`results.${index}.compat_keys_total`);
+    }
+  });
+});
+
+describe('browsercompat_check_baseline — features past the per-call cap (#29)', () => {
+  it('21 entries evaluate the first 20 and return entry 21 in omitted_features; all_widely_available is false', async () => {
+    const features = [...Array(20).fill('has'), 'grid'];
+    const { output, text } = await contract(features);
+    expect(output.results).toHaveLength(20);
+    expect(output.results.every((item) => item.baseline?.state === 'widely')).toBe(true);
+    expect(output.omitted_features).toEqual(['grid']);
+    expect(output.all_widely_available).toBe(false);
+    expect(text.split('\n')).toContain(formatOmittedFeatures(['grid']));
+  });
+
+  it('100 entries succeed with 80 omitted, verbatim and in input order', async () => {
+    const features = Array.from({ length: 100 }, (_, index) =>
+      index < 20 ? 'has' : index % 2 === 0 ? ` grid-${index} ` : `css.selectors.has`,
+    );
+    const { output } = await contract(features);
+    expect(output.results).toHaveLength(20);
+    expect(output.omitted_features).toEqual(features.slice(20));
+  });
+
+  it('repeats count toward the 20, and entries resolving to one feature are evaluated separately', async () => {
+    const { output } = await contract([
+      ...Array(19).fill('has'),
+      'css.selectors.has',
+      'has',
+      ' has',
+    ]);
+    expect(output.results.map((item) => item.resolved_as?.baseline_id)).toEqual(
+      Array(20).fill('has'),
+    );
+    expect(output.results[19]?.input).toBe('css.selectors.has');
+    expect(output.omitted_features).toEqual(['has', ' has']);
+    expect(output.all_widely_available).toBe(false);
+  });
+
+  it('20 or fewer entries return no omitted_features and the same answer as before', async () => {
+    const { output, result } = await contract(Array(20).fill('has'));
+    expect(result.structuredContent).not.toHaveProperty('omitted_features');
+    expect(output.results).toHaveLength(20);
+    expect(output.all_widely_available).toBe(true);
+  });
+
+  it('a malformed entry past position 20 still rejects the call', async () => {
+    const base = Array(30).fill('has');
+    const long = [...base.slice(0, 25), 'a'.repeat(201), ...base.slice(25)];
+    expect(browsercompatCheckBaseline.input.safeParse({ features: long }).success).toBe(false);
+    const blank = runToolContract(browsercompatCheckBaseline, {
+      features: [...base.slice(0, 25), '   ', ...base.slice(25)],
+    });
+    expect(await blank).toMatchObject({
+      isError: true,
+      structuredContent: { error: { data: { reason: 'invalid_feature_input' } } },
+    });
   });
 });
