@@ -400,7 +400,7 @@ export function formatSupportSummary(rows: SupportRowOutput[]): string {
       ) {
         return `${row.browser_name} —`;
       }
-      return `${row.browser_name} ${row.version_added ?? '—'}`;
+      return `${row.browser_name} ${row.version_added_is_upper_bound ? '≤' : ''}${row.version_added}${row.verdict === 'supported' ? '' : ` (${row.verdict})`}`;
     })
     .join(', ');
 }

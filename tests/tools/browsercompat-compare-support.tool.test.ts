@@ -41,21 +41,21 @@ describe('browsercompat_compare_support — worked example: defaults', () => {
     'css.properties.anchor-name',
   ];
 
-  it('maps 30 of 35 defaults tokens, with the 5 unmapped tokens in unchecked_targets', async () => {
+  it('maps 31 of 36 defaults tokens, with the 5 unmapped tokens in unchecked_targets', async () => {
     const pages = await runAllPages(FEATURES, 'defaults');
     expect(pages).toHaveLength(4);
     for (const page of pages) {
       expect(page).toMatchObject({
         query_echo: 'defaults',
         comparable_features: 3,
-        targets_resolved_total: 30,
-        evaluated_targets_total: 30,
+        targets_resolved_total: 31,
+        evaluated_targets_total: 31,
         unchecked_targets_total: 5,
       });
     }
     const mapped = pages.flatMap((page) => page.targets_resolved);
     const unchecked = pages.flatMap((page) => page.unchecked_targets);
-    expect(mapped).toHaveLength(30);
+    expect(mapped).toHaveLength(31);
     expect(mapped.every((t) => t.evaluated)).toBe(true);
     expect(unchecked.map((t) => t.agent).sort()).toEqual(
       ['and_qq', 'and_uc', 'kaios', 'kaios', 'op_mini'].sort(),
@@ -68,8 +68,8 @@ describe('browsercompat_compare_support — worked example: defaults', () => {
 
   it('reports coverage figures matching the real caniuse-derived percentages', async () => {
     const { result } = await run(FEATURES, 'defaults');
-    expect(result.target_coverage_percent).toBeCloseTo(83.9128, 3);
-    expect(result.unchecked_coverage_percent).toBeCloseTo(0.7324, 3);
+    expect(result.target_coverage_percent).toBeCloseTo(85.4282, 3);
+    expect(result.unchecked_coverage_percent).toBeCloseTo(0.6078, 3);
   });
 
   it('0 of 3 features clears — css.selectors.has is inconclusive over the 5 unmapped tokens, the other two fail', async () => {
@@ -77,26 +77,19 @@ describe('browsercompat_compare_support — worked example: defaults', () => {
     expect(result.results.map((r) => r.verdict)).toEqual(['inconclusive', 'fails', 'fails']);
     expect(result.results[0]).toMatchObject({
       failing_total: 0,
-      evaluated_total: 30,
-      evaluated_coverage_percent: 83.9128,
+      evaluated_total: 31,
+      evaluated_coverage_percent: 85.4282,
       unchecked_total: 5,
-      unchecked_coverage_percent: 0.7324,
+      unchecked_coverage_percent: 0.6078,
     });
     expect(result.all_clear).toBe(false);
   });
 
-  it('Array.fromAsync fails exactly on chrome 120, chrome 109, op_mob 80 (unsupported)', async () => {
+  it('Array.fromAsync fails exactly on chrome 109, op_mob 80 (unsupported)', async () => {
     const pages = await runAllPages(FEATURES, 'defaults');
-    expect(pages.map((page) => page.results[1]?.failing_total)).toEqual([3, 3, 3, 3]);
-    expect(pages.map((page) => page.results[1]?.failing_targets.length)).toEqual([0, 2, 1, 0]);
+    expect(pages.map((page) => page.results[1]?.failing_total)).toEqual([2, 2, 2, 2]);
+    expect(pages.map((page) => page.results[1]?.failing_targets.length)).toEqual([0, 1, 1, 0]);
     expect(pages.flatMap((page) => page.results[1]?.failing_targets ?? [])).toEqual([
-      {
-        agent: 'chrome',
-        version_token: '120',
-        bcd_browser: 'chrome',
-        bcd_version: '120',
-        verdict: 'unsupported',
-      },
       {
         agent: 'chrome',
         version_token: '109',
@@ -118,13 +111,12 @@ describe('browsercompat_compare_support — worked example: defaults', () => {
     const pages = await runAllPages(FEATURES, 'defaults');
     const failing = pages.flatMap((page) => page.results[2]?.failing_targets ?? []);
     expect(failing.map((t) => `${t.agent} ${t.version_token}`)).toEqual([
-      'chrome 120',
       'chrome 109',
       'ios_saf 18.5-18.7',
       'op_mob 80',
     ]);
     expect(failing.every((t) => t.verdict === 'unsupported')).toBe(true);
-    expect(pages[0]?.results[2]).toMatchObject({ verdict: 'fails', failing_total: 4 });
+    expect(pages[0]?.results[2]).toMatchObject({ verdict: 'fails', failing_total: 3 });
   });
 
   it('conforms to the declared output schema on every page', async () => {
@@ -361,7 +353,7 @@ describe('browsercompat_compare_support — errors', () => {
 describe('browsercompat_compare_support — enrichment', () => {
   it('always echoes data_version, attribution, and the page arithmetic, with totalCount counting query targets', async () => {
     const { ctx } = await run(['has', 'grid', 'nope-xyz'], 'chrome 120, chrome 109');
-    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.5' });
+    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.7' });
     expect(getEnrichment(ctx).attribution).toMatch(/caniuse\.com/);
     expect(getEnrichment(ctx)).toMatchObject({
       totalCount: 2,
@@ -379,34 +371,34 @@ describe('browsercompat_compare_support — enrichment', () => {
       target_limit: 3,
     });
     expect(getEnrichment(ctx)).toMatchObject({
-      totalCount: 35,
+      totalCount: 36,
       shown: 3,
       cap: 3,
       truncated: true,
       nextOffset: 33,
     });
     expect(result.targets_resolved.map((t) => `${t.agent} ${t.version_token}`)).toEqual([
+      'opera 135',
+      'opera 134',
       'safari 27',
-      'safari 26.6',
-      'safari 26.5',
     ]);
   });
 
   it('an offset past the end sets offsetNotice and no continuation', async () => {
-    const { ctx, result } = await run(['has'], 'defaults', false, { target_offset: 35 });
-    expect(getEnrichment(ctx)).toMatchObject({ totalCount: 35, shown: 0, truncated: false });
+    const { ctx, result } = await run(['has'], 'defaults', false, { target_offset: 36 });
+    expect(getEnrichment(ctx)).toMatchObject({ totalCount: 36, shown: 0, truncated: false });
     expect(getEnrichment(ctx).nextOffset).toBeUndefined();
-    expect(getEnrichment(ctx).offsetNotice).toContain('target_offset below 35');
+    expect(getEnrichment(ctx).offsetNotice).toContain('target_offset below 36');
     expect(result.targets_resolved).toEqual([]);
-    expect(result.results[0]).toMatchObject({ verdict: 'inconclusive', evaluated_total: 30 });
+    expect(result.results[0]).toMatchObject({ verdict: 'inconclusive', evaluated_total: 31 });
   });
 
   it('uncheckedNotice names the agents and combined usage share when targets go unchecked', async () => {
     const { ctx } = await run(['has'], 'defaults');
     const notice = getEnrichment(ctx).uncheckedNotice as string | undefined;
-    expect(notice).toContain('5 of 35 target versions were not evaluated');
+    expect(notice).toContain('5 of 36 target versions were not evaluated');
     expect(notice).toContain('(and_qq, and_uc, kaios, op_mini)');
-    expect(notice).toContain('0.7324% of tracked traffic');
+    expect(notice).toContain('0.6078% of global traffic');
   });
 
   it('uncheckedNotice is absent when every target resolves cleanly', async () => {
@@ -425,15 +417,15 @@ describe('browsercompat_compare_support — format()', () => {
     const text = (blocks?.[0] as { text: string } | undefined)?.text;
     expect(text).toContain('# 0 of 3 features clears `defaults`');
     expect(text).toContain(
-      'Evaluated for every compared feature: 30 of 35 target versions (83.9128% of tracked traffic) · not evaluated: 5 (0.7324%)',
+      'Evaluated for every compared feature: 31 of 36 target versions (85.4282% of global traffic) · not evaluated: 5 (0.6078%)',
     );
     expect(text).toContain(
-      'Compared 3 of 3 features · 30 of 35 target versions map to a browser-compat-data release',
+      'Compared 3 of 3 features · 31 of 36 target versions map to a browser-compat-data release',
     );
     expect(text).toContain('**all_clear:** false');
     expect(text).toContain('**inconclusive**');
     expect(text).toContain('**fails**');
-    expect(text).toContain('## Targets mapped to a release — 8 of 30 on this page');
+    expect(text).toContain('## Targets mapped to a release — 8 of 31 on this page');
     expect(text).toContain('## Not evaluated for every compared feature — 2 of 5 on this page');
     expect(text).toContain('no_bcd_browser');
     expect(text).not.toContain('## Targets evaluated');
@@ -445,7 +437,7 @@ describe('browsercompat_compare_support — format()', () => {
     const text = (blocks?.[0] as { text: string } | undefined)?.text;
     expect(text).toContain('# 1 of 1 features clears `chrome 120`');
     expect(text).toContain(
-      '  - evaluated on 1 of 1 target versions (0.5159% of tracked traffic) · failing 0 · not evaluated 0 (0%)',
+      '  - evaluated on 1 of 1 target versions (0.353% of global traffic) · failing 0 · not evaluated 0 (0%)',
     );
     expect(text).toContain('Every target version was evaluated for every compared feature.');
   });
@@ -474,7 +466,7 @@ describe('browsercompat_compare_support — format()', () => {
       `  - compat_keys: 10 of 61: ${result.results[0]?.compat_keys?.join(', ')} — call browsercompat_get_feature with grid for all 61`,
     ]);
     expect(lines).toContain(
-      '  - not evaluated on android 154 (no_feature_level_data, 0.0305% usage)',
+      '  - not evaluated on android 156 (no_feature_level_data, 0.0304% usage)',
     );
   });
 });

@@ -15,11 +15,11 @@ describe('getDataVersion', () => {
   it('resolves every bundled dataset version, matching the installed packages', async () => {
     const version = await getDataVersion();
     expect(version).toEqual({
-      bcd: '8.1.5',
-      bcd_generated: '2026-10-08T12:46:21.707Z',
-      web_features: '3.42.0',
-      caniuse_lite: '1.0.30001815',
-      browserslist: '4.29.3',
+      bcd: '8.1.7',
+      bcd_generated: '2026-10-22T13:20:14.760Z',
+      web_features: '3.44.0',
+      caniuse_lite: '1.0.30001819',
+      browserslist: '4.29.4',
     });
   });
 

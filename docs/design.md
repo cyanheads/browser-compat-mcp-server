@@ -8,7 +8,7 @@
 |:-----|:------------|:-----------|:------------|
 | `browsercompat_list_reference` | Enumerate the vocabulary the other tools expect: BCD namespaces, BCD browser ids, browserslist agent ids and their BCD counterparts, Baseline states, web-features groups, and ECMAScript snapshots. | `topic: 'bcd_namespaces' \| 'bcd_browsers' \| 'browserslist_agents' \| 'baseline_states' \| 'groups' \| 'snapshots'` | `readOnlyHint`, `idempotentHint`, `openWorldHint: false` |
 | `browsercompat_get_feature` | Get the full compatibility record for one web feature: Baseline state and date, deprecation and standards status, per-browser version-added/removed with flags, prefixes and partial-implementation notes, every other support statement per browser, and MDN/spec links. | `feature: string`, `resolve?: boolean`, `include_runtimes?: boolean`, `subkeys_offset?: number`, `compat_keys_offset?: number` | `readOnlyHint`, `idempotentHint`, `openWorldHint: false` |
-| `browsercompat_check_baseline` | Check whether one or more features are safe to ship: Baseline state and date, the limiting browser and version, deprecated/discouraged flags, and the share of tracked global traffic that would be excluded. | `features: string[]`, `resolve?: boolean` | `readOnlyHint`, `idempotentHint`, `openWorldHint: false` |
+| `browsercompat_check_baseline` | Check whether one or more features are safe to ship: Baseline state and date, the limiting browser and version, deprecated/discouraged flags, and the percentage points of global traffic that would be excluded. | `features: string[]`, `resolve?: boolean` | `readOnlyHint`, `idempotentHint`, `openWorldHint: false` |
 | `browsercompat_search_features` | Find web features by plain name or keyword when the canonical key is unknown, across CSS, JavaScript, HTML, Web APIs, SVG, MathML, WebAssembly, and HTTP headers. | `query: string`, `namespace?: string`, `baseline?: string`, `group?: string`, `snapshot?: string`, `limit?: number`, `offset?: number` | `readOnlyHint`, `idempotentHint`, `openWorldHint: false` |
 | `browsercompat_compare_support` | Compute whether a set of features clears an explicit browserslist target query: a whole-query verdict, evaluated coverage, and failing version runs per feature on every call, with the failing and unevaluated target rows paged ten query targets at a time. | `features: string[]`, `targets: string`, `resolve?: boolean`, `target_offset?: number`, `target_limit?: number` | `readOnlyHint`, `idempotentHint`, `openWorldHint: false` |
 
@@ -183,7 +183,7 @@ Field frequency: `kind` 1,210 · `description` / `description_html` / `name` / `
 
 **583 features.** `feature(features[id])` returns `{ status, title, shown, stats }` — there is **no `keywords` and no `categories` field**; those exist only in the full `caniuse-db`, which is not bundled. `stats[agent][version]` is a letter code (`y` 251,281 · `n` 115,630 · `a` 26,869 · `p` 2,866 · `u` 2,006), optionally suffixed with note or prefix flags.
 
-Total `usage_global` across all agents sums to **96.688%**, not 100 — every usage figure is a share of tracked traffic, and must be labelled as such.
+`usage_global` values are percentage points of global traffic, without normalization to the tracked subset. The tracked total is derived from every agent in the bundled dataset; the remainder is untracked and unknown.
 
 Per-agent total usage: `and_chr` 46.325 · `chrome` 22.170 · `ios_saf` 13.728 · `edge` 5.088 · `firefox` 2.893 · `safari` 2.470 · `samsung` 1.341 · `op_mob` 0.979 · `and_uc` 0.681 · `and_ff` 0.362 · `ie` 0.266 · `opera` 0.248 · `and_qq` 0.097 · `android` 0.032 · `kaios` 0.005 · `op_mini` / `bb` / `ie_mob` / `baidu` 0.000.
 
@@ -277,8 +277,8 @@ resolved_as: {
    - `version_added: 'preview'` → applies only in a preview channel. Treat as not shipped, and remember it for the `preview_only` verdict.
    - `≤X` → added at or before X. For a target at or after X this is a plain yes. For a target *before* X the answer is `unknown`, never `no` — BCD is explicitly saying it does not know how far back.
    - Plain version string → `addedIndex = resolveTargetVersion(...)`.
-   - `version_removed` present → `removedIndex = resolveTargetVersion(...)`; the statement covers `[addedIndex, removedIndex)`. Render `version_last` as the last supporting release.
-4. A statement covers the target when `targetIndex >= addedIndex` and (`removedIndex` is absent or `targetIndex < removedIndex`).
+   - Exact `version_removed` → `removedIndex = resolveTargetVersion(...)`; the statement covers `[addedIndex, removedIndex)`. For `≤X`, a target before an exact addition remains unsupported, targets within possible support before X are unknown, and targets at or beyond X are removed. Render `version_last` as the last supporting release.
+4. A statement covers the target when `targetIndex >= addedIndex` and (`removedIndex` is absent or an exact removal is later than the target). Proven covering support wins over uncertain siblings; otherwise an uncertain possible covering statement wins over already-removed siblings.
 5. Among covering statements pick the cleanest, ranked: no qualifiers > `partial_implementation` > `prefix` or `alternative_name` > `flags`. A tie keeps the statement BCD lists first: `api.Element.matches` on `edge 12` has two covering alternative names and reports `webkitMatchesSelector`, not the later `msMatchesSelector` range.
 
 | Verdict | Condition |
@@ -287,10 +287,10 @@ resolved_as: {
 | `partial` | best covering statement has `partial_implementation: true` |
 | `prefixed` | best covering statement has `prefix` or `alternative_name` |
 | `flagged` | the only covering statements are flag-gated |
-| `removed` | every statement that ever applied has a `version_removed` at or before the target |
-| `unsupported` | `version_added: false`, or no statement covers the target |
+| `removed` | every applied statement was removed at or before the target, with no uncertain possible covering sibling |
+| `unsupported` | `version_added: false`, or the target is definitely before an exact addition, without a covering or uncertain sibling |
 | `preview_only` | the only applicable statement is `version_added: 'preview'` |
-| `unknown` | browser absent from `support`; or `≤X` with the target before X; or the target version was unresolvable |
+| `unknown` | browser absent from `support`; an addition `≤X` before X; possible support before a removal `≤X`; or the target version was unresolvable |
 
 For `unsupported`, preserve only notes and implementation URLs from `version_added: false` statements; for `preview_only`, use only `version_added: "preview"` statements. Merge matching metadata in declaration order with deduplication. Numeric future statements never lend metadata to an older unsupported target, and these rows carry no invented version fields. Covering/removed selection and unknown outcomes stay unchanged.
 
@@ -547,7 +547,7 @@ For `no_compat_data`: `"<id>" is a tracked web-features entry with no browser-co
 
 The cheap ship/no-ship entry point across several features at once. `browsercompat_compare_support` is the explicit-targets variant of the same question.
 
-**Description:** `Check whether web features are safe to ship: Baseline state and the date it crossed, the browser and version that limits support, whether the feature is deprecated or discouraged, and the share of tracked global traffic that requiring it would exclude. Evaluates up to 20 BCD keys or web-features ids per call; up to 100 may be sent, and entries past the 20th come back unevaluated in omitted_features for the next call.`
+**Description:** `Check whether web features are safe to ship: Baseline state and the date it crossed, the browser and version that limits support, whether the feature is deprecated or discouraged, and the percentage points of global traffic that requiring it would exclude. Evaluates up to 20 BCD keys or web-features ids per call; up to 100 may be sent, and entries past the 20th come back unevaluated in omitted_features for the next call.`
 
 **Input**
 
@@ -568,7 +568,7 @@ Partial success is native: a per-item `found` flag, no separate `failed[]`, beca
 
 `discouraged` is `{ reason, according_to[] }` straight from web-features (56 features).
 
-**`usage_percent_excluded`** is a feature-level figure: the feature must reach available `caniuse-lite` data through its web-features `caniuse[]`. A resolved BCD key receives the figure only when `compat_features` is exactly that sole key; tag-only attribution does not establish equivalence. Multi-key and zero-key feature resolutions retain their genuine feature figure. The value sums `agents[a].usage_global[v]` over agent/version pairs whose stat letter is not `y` for every mapped caniuse feature. Partial support (`a`) counts as excluded. `usage_source` states both feature scope and the tracked-traffic population. Scope mismatch or missing data omits both usage fields, never substituting zero or treating unknown BCD support as proven exclusion.
+**`usage_percent_excluded`** is a feature-level figure: the feature must reach available `caniuse-lite` data through its web-features `caniuse[]`. A resolved BCD key receives the figure only when `compat_features` is exactly that sole key; tag-only attribution does not establish equivalence. Multi-key and zero-key feature resolutions retain their genuine feature figure. The value sums `agents[a].usage_global[v]` over agent/version pairs whose stat letter is not `y` for every mapped caniuse feature. Partial support (`a`) counts as excluded. `usage_source` states both feature scope and the global-traffic population. Scope mismatch or missing data omits both usage fields, never substituting zero or treating unknown BCD support as proven exclusion.
 
 **Errors**
 
@@ -613,7 +613,7 @@ The ranking is a total order over a static snapshot, so a plain offset is stable
 
 **Output** — `{ results[] }` where each result is `{ bcd_key?, baseline_id?, name?, description?, baseline_state, matched_on, support_summary, mdn_url? }`. `matched_on` ∈ `bcd_key` \| `baseline_id` \| `name` \| `caniuse_title` \| `path_suffix` \| `path_segment` \| `description` \| `path_tokens`.
 
-`support_summary` is a single line over all 7 Baseline core browsers, including the mobile twins, e.g. `Chrome 105, Chrome Android 105, Edge 105, Firefox 121, Firefox for Android 121, Safari 15.4, Safari on iOS 15.4`, with `—` for unsupported and `?` for unknown.
+`support_summary` is a single line over all 7 Baseline core browsers, including the mobile twins. A supported-family row preserves its selected verdict and addition bound: `Firefox 33 (flagged)`, `Safari 3 (prefixed)`, `Chrome 94 (partial)`, `Edge ≤18`, or `Chrome ≤94 (partial)` when both apply. Exact full support remains `Chrome 105`; `—` means unsupported, removed, or preview-only, and `?` means unknown. Details remain in `browsercompat_get_feature`.
 
 **Errors**
 
@@ -655,7 +655,7 @@ Zero hits are a successful empty result, not an error.
 
 ### `browsercompat_compare_support`
 
-**Description:** `Compute whether a set of web features clears an explicit browserslist target query. Compares up to 20 features per call; up to 100 may be sent, and entries past the 20th come back unevaluated in omitted_features for the next call. Every call evaluates the whole query: each feature gets a verdict, the count of failing targets, those targets grouped into runs of consecutive query targets per browser in failing_ranges, and its own evaluated and unevaluated target counts with the share of tracked traffic each covers. The target rows behind those numbers — which release each target maps to, which targets were not evaluated and why, and the failing and unevaluated targets of each feature, a failing row carrying the prefix, alternative name, or flag behind its verdict — cover at most ten query targets per call; page through them with target_offset and target_limit, and the verdicts, coverage, and totals stay identical on every page. A target counts as evaluated only where compatibility data was read for it, so a feature clears only when every target in the query was evaluated and supports it, and is inconclusive otherwise — a query that includes a browser with no compatibility data, as "defaults" does, never clears. A BCD key is judged on its own per-browser support. A web-features id spanning several keys, such as grid, is judged on the release web-features lists for the feature as a whole in each Baseline core browser, as support_source says; its other browsers are not evaluated.`
+**Description:** `Compute whether a set of web features clears an explicit browserslist target query. Compares up to 20 features per call; up to 100 may be sent, and entries past the 20th come back unevaluated in omitted_features for the next call. Every call evaluates the whole query: each feature gets a verdict, the count of failing targets, those targets grouped into runs of consecutive query targets per browser in failing_ranges, and its own evaluated and unevaluated target counts with the percentage points of global traffic each covers. The target rows behind those numbers — which release each target maps to, which targets were not evaluated and why, and the failing and unevaluated targets of each feature, a failing row carrying the prefix, alternative name, or flag behind its verdict — cover at most ten query targets per call; page through them with target_offset and target_limit, and the verdicts, coverage, and totals stay identical on every page. A target counts as evaluated only where compatibility data was read for it, so a feature clears only when every target in the query was evaluated and supports it, and is inconclusive otherwise — a query that includes a browser with no compatibility data, as "defaults" does, never clears. A BCD key is judged on its own per-browser support. A web-features id spanning several keys, such as grid, is judged on the release web-features lists for the feature as a whole in each Baseline core browser, as support_source says; its other browsers are not evaluated.`
 
 **Input**
 
@@ -673,7 +673,7 @@ A negative or non-integer `target_offset`, and a `target_limit` of 0 or 1001, ar
 
 | # | Step | On failure |
 |:--|:-----|:-----------|
-| 1 | `browserslist(targets, { path: false })` | `BrowserslistError` → `invalid_target_query` |
+| 1 | Parse with the installed browserslist parser and reject `extends`, `popularity_in_config_stats`, `cover_config`, and `browserslist_config` nodes before resolution; then `browserslist(targets, { path: false })` with discovery disabled | Config-dependent nodes or `BrowserslistError` → `invalid_target_query`; `current node` still reaches resolution and the existing `no_targets_resolved` error |
 | 2 | Split tokens by agent, map through the browserslist↔BCD table | unmapped agent → unchecked, reason `no_bcd_browser` |
 | 3 | `resolveTargetVersion` per mapped token | unresolvable → unchecked, reason `unknown_version` |
 | 4 | If no token resolved **and** no token was a mapped agent carrying an unresolvable version → `no_targets_resolved` | error |
@@ -711,7 +711,7 @@ A compared result carries `support_source`, `failing_total`, `failing_ranges`, `
 
 | reason | code | when | recovery |
 |:-------|:-----|:-----|:---------|
-| `invalid_target_query` | `ValidationError` | browserslist rejected the query (`err.browserslist === true`) | `Fix the query and retry — call browsercompat_list_reference with topic browserslist_agents for the 19 valid agent ids. A negation-only query needs a base, e.g. "defaults, not dead" rather than "not dead".` |
+| `invalid_target_query` | `ValidationError` | browserslist rejected the query (`err.browserslist === true`), or it requires config packages or custom configuration | `Use a self-contained query without config packages or custom configuration — call browsercompat_list_reference with topic browserslist_agents for the 19 valid agent ids. A negation-only query needs a base, e.g. "defaults, not dead" rather than "not dead".` |
 | `no_targets_resolved` | `ValidationError` | the query matched no browser versions at all, or only agents with no BCD counterpart | `Widen the targets query so it selects at least one browser that has compatibility data — call browsercompat_list_reference with topic browserslist_agents to see which of the 19 agents do.` |
 | `invalid_feature_input` | `ValidationError` | any `features` entry is whitespace-only. An empty or over-200-character entry is rejected against the input schema instead | `Replace the whitespace-only entry with a BCD key such as css.selectors.has or a web-features id such as has; use browsercompat_search_features to find one.` |
 
@@ -741,14 +741,14 @@ Worked example — page 1 of `features: ["css.selectors.has", "javascript.builti
 
 ```
 # 0 of 3 features clears `defaults`
-Evaluated for every compared feature: 30 of 35 target versions (83.9128% of tracked traffic) · not evaluated: 5 (0.7324%)
+Evaluated for every compared feature: 30 of 35 target versions (83.9128% of global traffic) · not evaluated: 5 (0.7324%)
 Compared 3 of 3 features · 30 of 35 target versions map to a browser-compat-data release
 **all_clear:** false
 
 **inconclusive** :has() (input css.selectors.has, found true)
   - resolved: "css.selectors.has" → bcd_key css.selectors.has · baseline_id has · via bcd_key
   - support_source: bcd_key
-  - evaluated on 30 of 35 target versions (83.9128% of tracked traffic) · failing 0 · not evaluated 5 (0.7324%)
+  - evaluated on 30 of 35 target versions (83.9128% of global traffic) · failing 0 · not evaluated 5 (0.7324%)
   - on this page: 0 of 0 failing, 2 of 5 not evaluated
   - failing_ranges (whole query): none
   - not evaluated on and_qq 14.9 (no_bcd_browser, 0.0915% usage)
@@ -756,7 +756,7 @@ Compared 3 of 3 features · 30 of 35 target versions map to a browser-compat-dat
 **fails** Array.fromAsync() (input javascript.builtins.Array.fromAsync, found true)
   - resolved: "javascript.builtins.Array.fromAsync" → bcd_key javascript.builtins.Array.fromAsync · baseline_id array-fromasync · via bcd_key
   - support_source: bcd_key
-  - evaluated on 30 of 35 target versions (83.9128% of tracked traffic) · failing 3 · not evaluated 5 (0.7324%)
+  - evaluated on 30 of 35 target versions (83.9128% of global traffic) · failing 3 · not evaluated 5 (0.7324%)
   - on this page: 0 of 3 failing, 2 of 5 not evaluated
   - failing_ranges (whole query): chrome 120 to 109: 2 unsupported; op_mob 80: 1 unsupported
   - not evaluated on and_qq 14.9 (no_bcd_browser, 0.0915% usage)
@@ -764,7 +764,7 @@ Compared 3 of 3 features · 30 of 35 target versions map to a browser-compat-dat
 **fails** Anchor positioning (input css.properties.anchor-name, found true)
   - resolved: "css.properties.anchor-name" → bcd_key css.properties.anchor-name · baseline_id anchor-positioning · via bcd_key
   - support_source: bcd_key
-  - evaluated on 30 of 35 target versions (83.9128% of tracked traffic) · failing 4 · not evaluated 5 (0.7324%)
+  - evaluated on 30 of 35 target versions (83.9128% of global traffic) · failing 4 · not evaluated 5 (0.7324%)
   - on this page: 0 of 4 failing, 2 of 5 not evaluated
   - failing_ranges (whole query): chrome 120 to 109: 2 unsupported; ios_saf 18.5-18.7: 1 unsupported; op_mob 80: 1 unsupported
   - not evaluated on and_qq 14.9 (no_bcd_browser, 0.0915% usage)
@@ -797,7 +797,7 @@ The trailer, a second text block, carries the page position beside the data vint
 **Page size (target_limit):** 10
 **More targets remain:** yes
 **Next page:** call again with target_offset 10
-**Not evaluated:** 5 of 35 target versions were not evaluated for every compared feature (and_qq, and_uc, kaios, op_mini), together 0.7324% of tracked traffic. No feature is reported as clearing them.
+**Not evaluated:** 5 of 35 target versions were not evaluated for every compared feature (and_qq, and_uc, kaios, op_mini), together 0.7324% of global traffic. No feature is reported as clearing them.
 ```
 
 Both `fails` verdicts on this page rest on targets further into the query: the page shows `0 of 3 failing` and `0 of 4 failing` while the totals and `failing_ranges` already name them. The walk takes four pages. Page 2 (`target_offset: 10`) lists `chrome 120` and `chrome 109` for both; page 3 adds `op_mob 80` for both and `ios_saf 18.5-18.7` for `anchor-name`; page 4 covers the last 5 targets and carries no `nextOffset`. The three verdicts, `all_clear`, and every total and percentage above are the same on all four.
@@ -858,9 +858,9 @@ No auth scopes. Every tool is read-only over bundled public data with no tenant-
 
 The per-response attribution string, used verbatim wherever a usage percentage appears:
 
-> `Usage data from caniuse.com, © Can I Use contributors, CC BY 4.0. Figures are a share of the ~97.3% of global traffic caniuse tracks.`
+> `Usage data from caniuse.com, © Can I Use contributors, CC BY 4.0. Figures are percentage points of global traffic. The bundled data tracks ~97.5% of global traffic; the remainder is untracked and unknown.`
 
-The figure is the `CANIUSE_TRACKED_PERCENT` constant: `usage_global` summed across every agent of the bundled caniuse-lite, to one decimal. A test pins it to the bundled data, so a caniuse-lite bump that moves it fails until the constant and the documents quoting the string are updated.
+The figure is `CANIUSE_TRACKED_PERCENT`: `usage_global` summed once across every agent of the bundled caniuse-lite, to one decimal. A test checks it against the bundled data and verifies that the documents quote the attribution verbatim.
 
 It rides `enrichment.attribution`, which reaches both `structuredContent` and `content[]` without a `format()` entry. Tools that never emit a usage figure (`get_feature`, `search_features`) do not populate it.
 
@@ -921,7 +921,7 @@ Each step is independently testable. Steps 3 and 4 are the load-bearing ones; ev
 
 **D16 — caniuse contributes titles and usage only, never support facts.** `caniuse-lite` exposes `{ status, title, shown, stats }` per feature — no keywords, no categories. Its `stats` letters are a second, coarser support opinion that would contradict BCD on edge cases, so BCD stays the single support authority and caniuse supplies 583 titles for the search index plus `usage_global` and `coverage()` for weighting.
 
-**D17 — No resources.** Every datum is reachable through the tool surface. A `browsercompat://feature/{key}` resource would need URI-encoding of dotted keys and would duplicate `get_feature` on a second surface that many clients never expose, for no capability the tools lack.
+**D17 — No feature-data resources.** Every compatibility datum is reachable through the tool surface. A `browsercompat://feature/{key}` resource would need URI-encoding of dotted keys and would duplicate `get_feature` on a second surface that many clients never expose, for no capability the tools lack. The published `browser-compat-guide` is served separately as a skill resource: it supplies workflow gates for matching code granularity and browser policy, rather than duplicating feature records.
 
 **D18 — No prompts.** The server answers point lookups and one comparison; there is no recurring multi-step interaction pattern worth a template.
 
@@ -989,7 +989,7 @@ Each step is independently testable. Steps 3 and 4 are the load-bearing ones; ev
 
 **D50 — "Evaluated" means compatibility data was read for the target, per feature; the aggregate is the intersection.** Mapping a token onto a BCD release is not evaluation: a key can record nothing for that browser, and which browsers a key records varies by key. Each compared result carries its own evaluated and unchecked counts and coverage. The top-level `target_coverage_percent` covers only the targets every compared feature has data for, and `unchecked_coverage_percent` is its complement within the query, so no token is counted on both sides. `targets_resolved` stays the mapping inventory, with an `evaluated` flag per row. With no comparable feature nothing was evaluated: coverage is 0 and every mapped target is unchecked as `no_comparable_feature`.
 
-**D51 — A query containing any unevaluated target cannot return `clears`, which makes `defaults` `inconclusive` today.** `clears` asserts support on every target in the query. With one target unchecked, the most the data supports is "no failure found", which is `inconclusive`. `defaults` includes four agents with no BCD counterpart (5 of its 35 tokens, 0.7324% of tracked traffic), so a feature supported on all 30 evaluated targets still reads `inconclusive`. A `clears` that silently skipped them is what D12 exists to prevent. The per-result `failing_total`, `evaluated_total`, and `unchecked_coverage_percent` let a caller decide whether the unchecked share matters to them. A query limited to browsers with compatibility data can still clear.
+**D51 — A query containing any unevaluated target cannot return `clears`, which makes `defaults` `inconclusive` today.** `clears` asserts support on every target in the query. With one target unchecked, the most the data supports is "no failure found", which is `inconclusive`. `defaults` includes four agents with no BCD counterpart (5 of its 35 tokens, 0.7324% of global traffic), so a feature supported on all 30 evaluated targets still reads `inconclusive`. A `clears` that silently skipped them is what D12 exists to prevent. The per-result `failing_total`, `evaluated_total`, and `unchecked_coverage_percent` let a caller decide whether the unchecked share matters to them. A query limited to browsers with compatibility data can still clear.
 
 **D52 — A page covers at most 10 query targets.** Every page target can contribute a row to each of up to 20 results as well as to the two top-level lists, so the response grows with features × page targets. At 10 the largest measured page — 20 features against `since 2000` — is 32,344 bytes of `structuredContent` and 20,591 bytes of text. A larger page would put a 20-feature call past the budget the paging exists to hold. D56 keeps 10 as the per-call cap and moves the schema's hard ceiling to 1000: a `target_limit` between them is served at 10 and reported in `cap`, rather than rejected. `support_source` (D53), the failing rows' statement fields (D57), and D58's `failing_ranges` raise that page to 50,676 bytes of `structuredContent` and 28,973 of text on BCD 8.1.5, 17,288 bytes of it from `failing_ranges`; the cap stays at 10, with the contract ceilings re-pinned about a quarter above the new largest pages.
 
@@ -1013,8 +1013,8 @@ Each step is independently testable. Steps 3 and 4 are the load-bearing ones; ev
 
 - **Staleness is the operating risk.** Baseline dates move — `:has()` crossed to widely available on 2026-06-19 — and a pinned dependency returns a stale ship/no-ship verdict on precisely the newest features. Two mitigations: `data_version` on every response, and a dependency bump at least monthly tracking BCD releases.
 - **24.9% of BCD keys have no Baseline mapping.** 5,154 leaves report `not_mapped`. Filtering search by any Baseline value excludes all of them, which the zero-hit notice says explicitly.
-- **Usage figures are a share of tracked traffic, not of all traffic.** caniuse `usage_global` sums to 97.2674% across all 19 agents in the bundled caniuse-lite 1.0.30001815. The attribution string states this on every response that carries a percentage.
-- **Seven browserslist agents have no compatibility data** — `op_mini`, `bb`, `and_uc`, `and_qq`, `baidu`, `kaios`, `ie_mob`, together 0.7324% of tracked usage. They always land in `unchecked_targets`; the server reports the gap rather than guessing.
+- **Untracked traffic is unknown.** Usage figures retain caniuse `usage_global` percentage points of global traffic. They are never normalized to the tracked subset; the attribution derives the tracked share from the bundled data.
+- **Seven browserslist agents have no compatibility data** — `op_mini`, `bb`, `and_uc`, `and_qq`, `baidu`, `kaios`, `ie_mob`, together 0.7324% of global traffic. They always land in `unchecked_targets`; the server reports the gap rather than guessing.
 - **`defaults` never returns `clears`.** Four of those agents are in it, and a query with any unevaluated target is `inconclusive` at best (D51). The per-feature totals say how much of the query was evaluated; a query restricted to browsers with compatibility data can clear.
 - **A batch result carries 10 compat keys, not all of them.** `check_baseline` and `compare_support` return the first 10 of a multi-key id's `compat_keys` with `compat_keys_total` (D55); the rest take a `browsercompat_get_feature` call with the id, paged 100 at a time. Those ten keys still repeat on every `target_offset` page, and on a broad query of feature-level results they help make the largest pages the server returns: the 20 ids owning the most keys against `since 2000` reach 38,123 bytes of text and 85,220 serialized on their last page, the measurements the 48,000- and 107,000-byte contract ceilings sit a quarter above.
 - **A failing row names one statement.** When two statements tie as the cleanest for a target, the `compare_support` row carries the first BCD lists (D57). `get_feature` lists every statement, but judges its rows at each browser's newest release, so the statement behind an older target's verdict is found among that browser's row and `other_statements` rather than marked there.

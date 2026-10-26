@@ -95,7 +95,7 @@ const EntrySchema = z.object({
   usage_percent: z
     .number()
     .optional()
-    .describe('Share of tracked global traffic attributed to this browserslist agent.'),
+    .describe('Percentage points of global traffic attributed to this browserslist agent.'),
   maps_from: z
     .union([z.literal('high'), z.literal('low'), z.literal(false), z.literal(null)])
     .optional()
@@ -266,7 +266,7 @@ export const browsercompatListReference = tool('browsercompat_list_reference', {
         lines.push(`- bcd_browser: ${markdownText(entry.bcd_browser ?? 'none')}`);
       }
       if (entry.usage_percent !== undefined) {
-        lines.push(`- usage_percent: ${entry.usage_percent}% of tracked traffic`);
+        lines.push(`- usage_percent: ${entry.usage_percent}% of global traffic`);
       }
       if (entry.maps_from !== undefined) {
         lines.push(`- maps_from: ${String(entry.maps_from)}`);

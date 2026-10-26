@@ -53,7 +53,7 @@ const ResultSchema = z.object({
   support_summary: z
     .string()
     .describe(
-      'One line over the Baseline core browsers, with — for unsupported and ? for unknown.',
+      'One line over the Baseline core browsers: addition release with ≤ for an upper bound and (partial), (prefixed), or (flagged) for qualified support; — for unsupported, removed, or preview-only; ? for unknown.',
     ),
   mdn_url: z.string().optional().describe('MDN reference page for this key.'),
 });

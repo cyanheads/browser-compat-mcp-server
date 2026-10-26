@@ -110,9 +110,9 @@ describe('resolveFeature — redirect follow (step 5)', () => {
       compat_keys: [
         'css.properties.display.grid-lanes',
         'css.properties.display.inline-grid-lanes',
-        'css.properties.flow-tolerance',
-        'css.properties.flow-tolerance.infinite',
-        'css.properties.flow-tolerance.normal',
+        'css.properties.fit-tolerance',
+        'css.properties.fit-tolerance.infinite',
+        'css.properties.fit-tolerance.normal',
       ],
     });
   });

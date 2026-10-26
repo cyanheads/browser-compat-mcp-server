@@ -40,7 +40,7 @@ describe('browsercompat_check_baseline — worked example', () => {
     expect(result.all_widely_available).toBe(false);
   });
 
-  it('has: widely, limiting_browser firefox 121, deprecated/experimental false, usage excluded 2.4496%', async () => {
+  it('has: widely, limiting_browser firefox 121, deprecated/experimental false, usage excluded 1.5832%', async () => {
     const { result } = await run(['has']);
     const has = result.results[0];
     expect(has).toMatchObject({
@@ -52,21 +52,15 @@ describe('browsercompat_check_baseline — worked example', () => {
       deprecated: false,
       experimental: false,
       usage_source:
-        'Feature-level caniuse figure; reported for a BCD key only when it is the feature’s sole declared compat key. Share of the roughly 97.3% of global traffic caniuse tracks, not of all traffic.',
+        'Feature-level caniuse figure; reported for a BCD key only when it is the feature’s sole declared compat key. Percentage points of global traffic; untracked traffic is unknown.',
     });
-    expect(has?.usage_percent_excluded).toBeCloseTo(2.4496, 3);
+    expect(has?.usage_percent_excluded).toBeCloseTo(1.5832, 3);
   });
 
-  it('usage_source states the tracked-traffic share the bundled caniuse-lite data sums to', async () => {
-    const { agents } = await import('caniuse-lite');
-    const tracked = Object.values(agents).reduce(
-      (sum, agent) =>
-        sum + Object.values(agent?.usage_global ?? {}).reduce((total, usage) => total + usage, 0),
-      0,
-    );
+  it('usage_source states the global population and unknown untracked traffic', async () => {
     const { result } = await run(['has']);
     expect(result.results[0]?.usage_source).toContain(
-      `roughly ${tracked.toFixed(1)}% of global traffic`,
+      'Percentage points of global traffic; untracked traffic is unknown.',
     );
   });
 
@@ -157,7 +151,7 @@ describe('browsercompat_check_baseline — all_widely_available (D30)', () => {
 describe('browsercompat_check_baseline — enrichment', () => {
   it('always echoes data_version and totalCount', async () => {
     const { ctx, result } = await run(['has', 'intersection-observer-v2']);
-    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.5' });
+    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.7' });
     expect(getEnrichment(ctx).totalCount).toBe(2);
     expect(result.results).toHaveLength(2);
   });
@@ -392,7 +386,7 @@ describe('browsercompat_check_baseline — compat_keys per result (#25)', () => 
     expect(output.results).toHaveLength(20);
     for (const item of output.results) {
       expect(item.compat_keys).toHaveLength(10);
-      expect(item.compat_keys_total).toBe(614);
+      expect(item.compat_keys_total).toBe(618);
     }
     expect(serializedBytes(result)).toBeLessThanOrEqual(40_000);
   });

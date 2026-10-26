@@ -1,7 +1,7 @@
 /**
  * @fileoverview Tool answering ship-or-not across up to 20 web features at
  * once: Baseline state and date, the limiting browser, deprecation and
- * discouragement flags, and the share of tracked traffic each feature excludes.
+ * discouragement flags, and the global traffic share each feature excludes.
  * @module mcp-server/tools/definitions/browsercompat-check-baseline
  */
 
@@ -15,11 +15,7 @@ import {
   getDataVersion,
   renderDataVersion,
 } from '@/services/data-version/data-version-service.js';
-import {
-  CANIUSE_ATTRIBUTION,
-  CANIUSE_TRACKED_PERCENT,
-  getTargetsService,
-} from '@/services/targets/targets-service.js';
+import { CANIUSE_ATTRIBUTION, getTargetsService } from '@/services/targets/targets-service.js';
 import { markdownText } from '@/utils/markdown-text.js';
 import {
   BaselineSchema,
@@ -36,7 +32,8 @@ import {
 } from './compat-shapes.js';
 
 /** What the usage figure is a share of, stated on every result that carries one. */
-const USAGE_SOURCE = `Feature-level caniuse figure; reported for a BCD key only when it is the feature’s sole declared compat key. Share of the roughly ${CANIUSE_TRACKED_PERCENT}% of global traffic caniuse tracks, not of all traffic.`;
+const USAGE_SOURCE =
+  'Feature-level caniuse figure; reported for a BCD key only when it is the feature’s sole declared compat key. Percentage points of global traffic; untracked traffic is unknown.';
 
 const ResultSchema = z.object({
   input: z.string().describe('The feature string as the caller sent it.'),
@@ -73,7 +70,7 @@ const ResultSchema = z.object({
     .number()
     .optional()
     .describe(
-      'Feature-level share of tracked traffic excluded. A resolved BCD key receives it only when it is the feature’s sole declared compat key. Absent without caniuse data — never zero in that case.',
+      'Feature-level percentage points of global traffic excluded. A resolved BCD key receives it only when it is the feature’s sole declared compat key. Absent without caniuse data — never zero in that case.',
     ),
   usage_source: z
     .string()
@@ -95,7 +92,7 @@ const ResultSchema = z.object({
 
 export const browsercompatCheckBaseline = tool('browsercompat_check_baseline', {
   description:
-    'Check whether web features are safe to ship: Baseline state and the date it crossed, the browser and version that limits support, whether the feature is deprecated or discouraged, and the share of tracked global traffic that requiring it would exclude. Evaluates up to 20 BCD keys or web-features ids per call; up to 100 may be sent, and entries past the 20th come back unevaluated in omitted_features for the next call.',
+    'Check whether web features are safe to ship: Baseline state and the date it crossed, the browser and version that limits support, whether the feature is deprecated or discouraged, and the percentage points of global traffic that requiring it would exclude. Evaluates up to 20 BCD keys or web-features ids per call; up to 100 may be sent, and entries past the 20th come back unevaluated in omitted_features for the next call.',
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
 
   input: z.object({

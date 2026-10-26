@@ -12,9 +12,9 @@ import { getBaselineService } from '@/services/baseline/baseline-service.js';
 import { BcdService, getBcdService } from '@/services/bcd/bcd-service.js';
 
 describe('BcdService — real bundled data', () => {
-  it('indexes 20,696 leaves across the 12 documented namespaces', async () => {
+  it('indexes 20,898 leaves across the 12 documented namespaces', async () => {
     const bcd = await getBcdService();
-    expect(bcd.leafCount).toBe(20_696);
+    expect(bcd.leafCount).toBe(20_898);
     expect([...bcd.namespaces]).toEqual([
       'api',
       'css',
@@ -29,9 +29,9 @@ describe('BcdService — real bundled data', () => {
       'webdriver',
       'webextensions',
     ]);
-    expect(bcd.namespaceLeafCount('api')).toBe(10_267);
-    expect(bcd.namespaceLeafCount('css')).toBe(4_212);
-    expect(bcd.namespaceLeafCount('webextensions')).toBe(2_075);
+    expect(bcd.namespaceLeafCount('api')).toBe(10_309);
+    expect(bcd.namespaceLeafCount('css')).toBe(4_291);
+    expect(bcd.namespaceLeafCount('webextensions')).toBe(2_078);
   });
 
   it('derives the reported browser set from type, never a hardcoded list (D8)', async () => {
@@ -300,9 +300,9 @@ describe('BcdService#supportAt — real leaves, verdict-by-verdict (per Core Mec
     expect(result.verdict).toBe('unknown');
   });
 
-  it('api.AnimationTimeline.duration [firefox]: preview-only support reports preview_only', async () => {
+  it('api.AudioSession [firefox]: preview-only support reports preview_only', async () => {
     const bcd = await getBcdService();
-    const leaf = bcd.leaf('api.AnimationTimeline.duration');
+    const leaf = bcd.leaf('api.AudioSession');
     expect(leaf).toBeDefined();
     const latest = bcd.latestShippedRelease('firefox');
     expect(latest).toBeDefined();

@@ -156,7 +156,7 @@ describe('tools/list surface', () => {
   });
 });
 
-describe('resources and prompts — none (D17/D18)', () => {
+describe('feature-data resource and prompt definitions — none (D17/D18)', () => {
   it('contains no resource or prompt definition files', () => {
     const srcRoot = fileURLToPath(new URL('../../src/mcp-server', import.meta.url));
     const definitions = readdirSync(srcRoot, { recursive: true, encoding: 'utf8' }).filter(

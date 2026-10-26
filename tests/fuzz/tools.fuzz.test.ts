@@ -74,7 +74,7 @@ it('keeps compat_keys pages, totals, and continuations coherent across generated
     if (!resolution.found) throw new Error(`${feature} must resolve`);
     owned.set(feature, [...(resolution.compat_keys ?? [])]);
   }
-  expect([...owned.values()].map((keys) => keys.length)).toEqual([614, 61, 10, 0]);
+  expect([...owned.values()].map((keys) => keys.length)).toEqual([618, 61, 10, 0]);
 
   await fc.assert(
     fc.asyncProperty(

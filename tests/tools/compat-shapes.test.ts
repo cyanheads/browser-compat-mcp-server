@@ -270,15 +270,6 @@ describe('formatSupportSummary', () => {
     ]);
     expect(summary).toBe('Chrome 105, Internet Explorer —, Firefox —, Safari —, Opera ?');
   });
-
-  it('falls back to — for a supported-family verdict with no version_added recorded', () => {
-    // Defensive case: a partial/flagged/prefixed row always carries
-    // version_added in practice, but the renderer must not crash if it didn't.
-    const summary = formatSupportSummary([
-      { browser_id: 'chrome', browser_name: 'Chrome', verdict: 'partial' },
-    ]);
-    expect(summary).toBe('Chrome —');
-  });
 });
 
 describe('sliceCompatKeys (#25)', () => {

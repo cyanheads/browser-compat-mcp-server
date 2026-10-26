@@ -262,7 +262,7 @@ describe('browsercompat_get_feature — Baseline not_mapped enrichment (D14)', (
 describe('browsercompat_get_feature — enrichment: data_version', () => {
   it('always echoes data_version, even on a miss', async () => {
     const { ctx } = await run({ feature: 'nope-xyz' });
-    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.5' });
+    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.7' });
   });
 });
 
@@ -404,34 +404,34 @@ describe('browsercompat_get_feature — compat_keys paging (#25)', () => {
     };
   };
 
-  it('svg returns the first 100 of 614 keys with a continuation, on both surfaces', async () => {
+  it('svg returns the first 100 of 618 keys with a continuation, on both surfaces', async () => {
     const { output, text } = await page('svg');
     expect(output.compat_keys).toEqual(
       (await getBaselineService()).compatKeys('svg').slice(0, 100),
     );
-    expect(output.compat_keys_total).toBe(614);
+    expect(output.compat_keys_total).toBe(618);
     expect(output.compat_keys_next_offset).toBe(100);
-    expect(text).toContain('**compat_keys:** 100 of 614: ');
+    expect(text).toContain('**compat_keys:** 100 of 618: ');
     expect(text).toContain('compat_keys_next_offset: 100 — re-run with compat_keys_offset: 100.');
   });
 
-  it('compat_keys_offset 600 returns the last 14 svg keys, in declaration order, and ends the list', async () => {
+  it('compat_keys_offset 600 returns the last 18 svg keys, in declaration order, and ends the list', async () => {
     const tail = (await getBaselineService()).compatKeys('svg').slice(600);
-    expect(tail).toHaveLength(14);
+    expect(tail).toHaveLength(18);
     const { output, result, text } = await page('svg', 600);
     expect(output.compat_keys).toEqual(tail);
-    expect(output.compat_keys_total).toBe(614);
+    expect(output.compat_keys_total).toBe(618);
     expect(result.structuredContent).not.toHaveProperty('compat_keys_next_offset');
-    expect(text.split('\n')).toContain(`**compat_keys:** 14 of 614: ${tail.join(', ')}`);
+    expect(text.split('\n')).toContain(`**compat_keys:** 18 of 618: ${tail.join(', ')}`);
   });
 
   it('an offset at or past the end returns no keys, the true total, and no continuation', async () => {
-    for (const offset of [614, 5000]) {
+    for (const offset of [618, 5000]) {
       const { output, result, text } = await page('svg', offset);
       expect(output.compat_keys).toEqual([]);
-      expect(output.compat_keys_total).toBe(614);
+      expect(output.compat_keys_total).toBe(618);
       expect(result.structuredContent).not.toHaveProperty('compat_keys_next_offset');
-      expect(text).toContain('**compat_keys:** 0 of 614 on this page');
+      expect(text).toContain('**compat_keys:** 0 of 618 on this page');
       expect(text).not.toContain('compat_keys_next_offset');
     }
   });

@@ -391,7 +391,8 @@ export class BcdService {
   /**
    * Evaluate a leaf's support for one browser at a target release index. A
    * browser absent from `support` is `unknown`, never unsupported; so is a `≤X`
-   * statement evaluated before X, because BCD is saying it does not know.
+   * addition statement evaluated before X, or possible support before a `≤X`
+   * removal, because BCD does not establish support for that target.
    */
   supportAt(leaf: CompatStatement, browserId: string, targetIndex: number): SupportEvaluation {
     const { verdict, detail } = this.evaluate(leaf, browserId, targetIndex);
@@ -430,12 +431,22 @@ export class BcdService {
       }
       const addedIndex = release.isUpperBound ? -1 : release.index;
 
+      // Before an exact addition, non-support is certain regardless of removal.
+      if (targetIndex < addedIndex) {
+        appliedCount += 1;
+        continue;
+      }
+
       let removedIndex: number | undefined;
       const removed = statement.version_removed;
       if (typeof removed === 'string') {
         const bare = removed.startsWith('≤') ? removed.slice(1) : removed;
         const resolvedRemove = this.resolveTargetVersion(browserId, bare);
         if (resolvedRemove.resolved) removedIndex = resolvedRemove.index;
+        if (removed.startsWith('≤') && (removedIndex === undefined || targetIndex < removedIndex)) {
+          sawUnknown = true;
+          continue;
+        }
       }
 
       appliedCount += 1;
@@ -446,7 +457,7 @@ export class BcdService {
         rank: statementRank(statement),
       };
 
-      if (targetIndex >= addedIndex && (removedIndex === undefined || targetIndex < removedIndex)) {
+      if (removedIndex === undefined || targetIndex < removedIndex) {
         covering.push(evaluated);
       } else if (removedIndex !== undefined && targetIndex >= removedIndex) {
         removedBefore.push(evaluated);
@@ -467,6 +478,8 @@ export class BcdService {
       };
     }
 
+    if (sawUnknown) return { verdict: 'unknown', detail: {}, sources: [], statements };
+
     if (appliedCount > 0 && removedBefore.length === appliedCount) {
       let latest = removedBefore[0] as EvaluatedStatement;
       for (const candidate of removedBefore) {
@@ -480,7 +493,6 @@ export class BcdService {
       };
     }
 
-    if (sawUnknown) return { verdict: 'unknown', detail: {}, sources: [], statements };
     const preview = sawPreview && appliedCount === 0;
     const matching = statements.filter(
       (statement) => statement.version_added === (preview ? 'preview' : false),

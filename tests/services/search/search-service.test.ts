@@ -493,9 +493,9 @@ describe('SearchService#rank — group and snapshot filters (synthetic index)', 
 });
 
 describe('SearchService — real bundled index', () => {
-  it('has 20,717 rows: every BCD leaf plus the 21 compat_features-less features', async () => {
+  it('has 20,919 rows: every BCD leaf plus the 21 compat_features-less features', async () => {
     const search = await getSearchService();
-    expect(search.size).toBe(20_717);
+    expect(search.size).toBe(20_919);
   });
 
   it('"container query" surfaces the container-queries feature on its name at tier 3', async () => {
@@ -594,13 +594,13 @@ describe('SearchService — ranking pins for queries the path_suffix tier and ta
       'webassembly.jspi|5|description',
     ]);
     const grid = search.rank('grid', {});
-    expect(grid).toHaveLength(254);
+    expect(grid).toHaveLength(256);
     expect(pin(grid, 2)).toEqual([
       'css.properties.gap|1|baseline_id',
       'css.properties.grid|1|baseline_id',
     ]);
     const display = search.rank('display', { namespace: 'css' });
-    expect(display).toHaveLength(355);
+    expect(display).toHaveLength(356);
     expect(pin(display, 1)).toEqual(['css.properties.display|1|baseline_id']);
     const has = search.rank('has', { baseline: 'widely' });
     expect(has).toHaveLength(255);
@@ -646,31 +646,34 @@ describe('SearchService — singular and plural forms on the real bundled index'
 
   /**
    * Fingerprints of the full ranking (`key|tier|matched_on`, one per line,
-   * SHA-256, first 16 hex) taken before singular readings existed. Each word is
+   * SHA-256, first 16 hex) pinned to the bundled dataset versions. Each word is
    * one the readings must leave alone: under four characters, a guarded ending,
    * or a reading that equals no whole token.
    */
   it.each([
-    ['has', 446, '660558e6ee7b3458'],
-    ['this', 437, '8fa6f15d9476643d'],
-    ['ems', 119, 'ef0e949065f2dfcf'],
-    ['ms', 1195, 'bcfaaa52b5d48c05'],
-    ['axis', 29, '7a688ec2218e7d98'],
+    ['has', 445, '379ee24c8dc846a7'],
+    ['this', 441, '970d9565250aec5b'],
+    ['ems', 138, 'b8590bcd65c59650'],
+    ['ms', 1229, '3ac089868accdd94'],
+    ['axis', 29, '40f9e6f909460c81'],
     ['axes', 5, '8f97cba17b25d6c6'],
     ['status', 361, '8dbe582210ae2a26'],
     ['class', 370, 'a2725ca91ea22c04'],
-    ['canvas', 882, 'f0708d94e94a65bf'],
+    ['canvas', 900, '871ffb4329f29d3d'],
     ['alias', 59, '1655cd20692d2e5c'],
     ['series', 42, 'de72f4d5e1e0979f'],
-  ])('"%s" returns exactly the %i rows it returned before', async (query, count, fingerprint) => {
-    const hits = (await getSearchService()).rank(query, {});
-    expect(hits).toHaveLength(count);
-    const digest = createHash('sha256')
-      .update(pin(hits, hits.length).join('\n'))
-      .digest('hex')
-      .slice(0, 16);
-    expect(digest).toBe(fingerprint);
-  });
+  ])(
+    '"%s" returns exactly the %i rows in the bundled snapshot',
+    async (query, count, fingerprint) => {
+      const hits = (await getSearchService()).rank(query, {});
+      expect(hits).toHaveLength(count);
+      const digest = createHash('sha256')
+        .update(pin(hits, hits.length).join('\n'))
+        .digest('hex')
+        .slice(0, 16);
+      expect(digest).toBe(fingerprint);
+    },
+  );
 });
 
 describe('SearchService — path_suffix on the real bundled index', () => {

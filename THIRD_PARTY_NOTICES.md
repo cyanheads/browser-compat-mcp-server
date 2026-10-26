@@ -6,10 +6,10 @@ attribution those datasets require.
 
 | Dataset | Version range | License | Source |
 |:--------|:--------------|:--------|:-------|
-| `@mdn/browser-compat-data` | ^8.1.5 | CC0-1.0 | https://github.com/mdn/browser-compat-data |
-| `web-features` | ^3.42.0 | Apache-2.0 | https://github.com/web-platform-dx/web-features |
-| `caniuse-lite` | ^1.0.30001815 | CC-BY-4.0 | https://github.com/browserslist/caniuse-lite |
-| `browserslist` | ^4.29.3 | MIT | https://github.com/browserslist/browserslist |
+| `@mdn/browser-compat-data` | ^8.1.7 | CC0-1.0 | https://github.com/mdn/browser-compat-data |
+| `web-features` | ^3.44.0 | Apache-2.0 | https://github.com/web-platform-dx/web-features |
+| `caniuse-lite` | ^1.0.30001819 | CC-BY-4.0 | https://github.com/browserslist/caniuse-lite |
+| `browserslist` | ^4.29.4 | MIT | https://github.com/browserslist/browserslist |
 
 Every tool response echoes the exact version of each dataset it answered from, under
 `data_version`.
@@ -246,8 +246,7 @@ Commons Attribution 4.0 International License. CC BY 4.0 requires attribution wh
 data is conveyed, so alongside this file every tool response that quotes a usage percentage
 carries this string verbatim in its `attribution` field:
 
-> Usage data from caniuse.com, © Can I Use contributors, CC BY 4.0. Figures are a share of
-> the ~97.3% of global traffic caniuse tracks.
+> Usage data from caniuse.com, © Can I Use contributors, CC BY 4.0. Figures are percentage points of global traffic. The bundled data tracks ~97.5% of global traffic; the remainder is untracked and unknown.
 
 Full license: https://creativecommons.org/licenses/by/4.0/legalcode
 

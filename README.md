@@ -7,7 +7,7 @@
 
 <div align="center">
 
-[![npm](https://img.shields.io/npm/v/@cyanheads/browser-compat-mcp-server?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/@cyanheads/browser-compat-mcp-server) [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg?style=flat-square)](./LICENSE) [![MCP SDK](https://img.shields.io/badge/MCP%20SDK-^2.3.1-green.svg?style=flat-square)](https://modelcontextprotocol.io/) [![Bun](https://img.shields.io/badge/Bun-v1.4.3%2B-blueviolet.svg?style=flat-square)](https://bun.sh/)
+[![npm](https://img.shields.io/npm/v/@cyanheads/browser-compat-mcp-server?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/@cyanheads/browser-compat-mcp-server) [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg?style=flat-square)](./LICENSE) [![MCP SDK](https://img.shields.io/badge/MCP%20SDK-^2.4.0-green.svg?style=flat-square)](https://modelcontextprotocol.io/) [![Bun](https://img.shields.io/badge/Bun-v1.4.4%2B-blueviolet.svg?style=flat-square)](https://bun.sh/)
 
 </div>
 
@@ -30,6 +30,8 @@
 ## Overview
 
 Browser support and Baseline status for any web platform feature, from MDN's `@mdn/browser-compat-data`, `web-features`, and `caniuse-lite` usage data. Check whether a feature is safe to ship against your browserslist targets. All data ships in the package: no network calls, no API key, no rate limit.
+
+The [browser-compat-guide](./skills/browser-compat-guide/SKILL.md) covers assessing code against a project's browser policy and diagnosing historical support failures. It ships with plugin, npm, Docker, and MCPB installs and is available over MCP at `skill://browser-compat-guide/SKILL.md`.
 
 ### Tools
 
@@ -71,14 +73,14 @@ Browser support and Baseline status for any web platform feature, from MDN's `@m
 ### `browsercompat_search_features` <sub>tool</sub>
 
 - `query`, 1–100 characters, accepts names, keywords, or notation such as `Array.prototype.at`, `display: grid`, or `<dialog>`. Combine `namespace` (12 BCD namespaces), `baseline` (`widely`, `newly`, `limited`, `not_mapped`), `group` (including nested groups), and `snapshot` (such as `ecmascript-2023`).
-- `matched_on` says why a result ranked where it did, and `support_summary` covers the seven Baseline core browsers (`—` unsupported, `?` unknown). Typed failures: `invalid_query` (zero searchable tokens), `unknown_group`, `unknown_snapshot`.
+- `matched_on` says why a result ranked where it did, and `support_summary` covers the seven Baseline core browsers: `Firefox 33 (flagged)`, `Safari 3 (prefixed)`, `Chrome 94 (partial)`, and `Edge ≤18` preserve the selected verdict and addition bound; `—` means unsupported, removed, or preview-only, and `?` means unknown. Typed failures: `invalid_query` (zero searchable tokens), `unknown_group`, `unknown_snapshot`.
 - Page with `limit` (default 10, at most 50; larger values are served as 50 and reported in `cap`) and `offset` (default 0); `totalCount` and `nextOffset` drive paging. Zero hits succeed with a notice naming a filter to drop.
 
 ---
 
 ### `browsercompat_compare_support` <sub>tool</sub>
 
-- Up to 20 features per call against a required `targets` browserslist query, such as `defaults` or `> 0.5%, last 2 versions`; local browserslist config is never used. Up to 100 features are accepted and the rest come back in `omitted_features`, which makes `all_clear` false. Typed failures: `invalid_target_query`, `no_targets_resolved`, `invalid_feature_input`.
+- Up to 20 features per call against a required self-contained `targets` browserslist query, such as `defaults` or `> 0.5%, last 2 versions`; config packages and custom configuration are rejected, and local config discovery is disabled. Up to 100 features are accepted and the rest come back in `omitted_features`, which makes `all_clear` false. Typed failures: `invalid_target_query`, `no_targets_resolved`, `invalid_feature_input`.
 - Each `verdict` is `clears`, `fails`, `inconclusive`, `miss`, or `ambiguous`. A feature clears only when every target in the query was evaluated and supports it, so a query that includes a browser with no compatibility data, as `defaults` does, never clears. `all_clear` is true only when every feature clears.
 - Results report `support_source`, `failing_ranges`, `failing_total`, and evaluated and unchecked totals with coverage percentages. Target rows page with `target_offset` (default 0) and `target_limit` (default 10, at most 10; larger values are served as 10 and reported in `cap`); verdicts and totals are the same on every page, and `totalCount` and `nextOffset` drive paging.
 
@@ -88,12 +90,12 @@ Browser support and Baseline status for any web platform feature, from MDN's `@m
 
 | Package | Version | License | Supplies |
 |:---|:---|:---|:---|
-| [`@mdn/browser-compat-data`](https://github.com/mdn/browser-compat-data) | `^8.1.5` | CC0-1.0 | Per-browser support, standards status, MDN and specification links |
-| [`web-features`](https://github.com/web-platform-dx/web-features) | `^3.42.0` | Apache-2.0 | Baseline state and dates, feature-level core-browser support, discouraged flags, groups, ECMAScript snapshots |
-| [`caniuse-lite`](https://github.com/browserslist/caniuse-lite) | `^1.0.30001815` | CC-BY-4.0 | Usage weighting, plus feature titles for the search index |
-| [`browserslist`](https://github.com/browserslist/browserslist) | `^4.29.3` | MIT | Target query resolution and coverage figures |
+| [`@mdn/browser-compat-data`](https://github.com/mdn/browser-compat-data) | `^8.1.7` | CC0-1.0 | Per-browser support, standards status, MDN and specification links |
+| [`web-features`](https://github.com/web-platform-dx/web-features) | `^3.44.0` | Apache-2.0 | Baseline state and dates, feature-level core-browser support, discouraged flags, groups, ECMAScript snapshots |
+| [`caniuse-lite`](https://github.com/browserslist/caniuse-lite) | `^1.0.30001819` | CC-BY-4.0 | Usage weighting, plus feature titles for the search index |
+| [`browserslist`](https://github.com/browserslist/browserslist) | `^4.29.4` | MIT | Target query resolution and coverage figures |
 
-CC BY 4.0 requires attribution wherever the caniuse data travels, so every response carrying a usage figure carries this string: `Usage data from caniuse.com, © Can I Use contributors, CC BY 4.0. Figures are a share of the ~97.3% of global traffic caniuse tracks.` Full license texts and notices are in [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md).
+CC BY 4.0 requires attribution wherever the caniuse data travels, so every response carrying a usage figure carries this string: `Usage data from caniuse.com, © Can I Use contributors, CC BY 4.0. Figures are percentage points of global traffic. The bundled data tracks ~97.5% of global traffic; the remainder is untracked and unknown.` Values are raw global percentages, without normalization to tracked traffic. Full license texts and notices are in [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md).
 
 ---
 
@@ -290,6 +292,7 @@ The Dockerfile defaults to HTTP transport, stateless session mode, and logs to `
 | `src/mcp-server/tools/` | Tool definitions (`*.tool.ts`) and the output shapes they share. |
 | `src/services/` | bcd, baseline, targets, search, and data-version services over the bundled datasets. |
 | `src/types/` | Ambient module declaration for `caniuse-lite`, which ships no types. |
+| `skills/` | Published browser compatibility workflow guide. |
 | `tests/` | Vitest suites mirroring `src/`. |
 | `docs/` | `design.md` — the surface, the data shapes behind it, and the decisions log. |
 | `changelog/` | Per-version changelog files. |

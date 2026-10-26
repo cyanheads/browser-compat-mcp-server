@@ -118,10 +118,10 @@ describe('characterization — behavior the paging and coverage changes must pre
     });
     expect(output.results[0]).toMatchObject({ verdict: 'inconclusive', failing_targets: [] });
     expect(output.unchecked_targets).toEqual([
-      { agent: 'ie', version_token: '11', reason: 'no_bcd_data', usage_percent: 0.2358 },
+      { agent: 'ie', version_token: '11', reason: 'no_bcd_data', usage_percent: 0.2118 },
     ]);
     expect(output.all_clear).toBe(false);
-    expect(text[0]).toContain('| ie 11 | no_bcd_data | 0.2358% |');
+    expect(text[0]).toContain('| ie 11 | no_bcd_data | 0.2118% |');
     expect(text[0]).not.toContain('fails on ie 11');
     expect(text[1]).toContain('**Not evaluated:**');
   });
@@ -191,7 +191,7 @@ describe('characterization — declared errors and schema bounds through the ass
       },
     });
     const text = texts(result).join('\n');
-    expect(text).toContain(message);
+    expect(text).toContain(message.replaceAll('`', '\\`'));
     expect(text).toContain(hint);
     expect(text).toContain(`(reason ${name})`);
   });
@@ -344,68 +344,68 @@ describe('#7 — coverage counts only the targets that were evaluated', () => {
     expect(output.results[0]).toMatchObject({
       verdict: 'inconclusive',
       failing_total: 0,
-      evaluated_total: 30,
-      evaluated_coverage_percent: 83.9128,
+      evaluated_total: 31,
+      evaluated_coverage_percent: 85.4282,
       unchecked_total: 5,
-      unchecked_coverage_percent: 0.7324,
+      unchecked_coverage_percent: 0.6078,
     });
     expect(output.results[1]).toMatchObject({
       verdict: 'inconclusive',
       failing_total: 0,
-      evaluated_total: 25,
-      evaluated_coverage_percent: 37.7322,
+      evaluated_total: 26,
+      evaluated_coverage_percent: 39.8527,
       unchecked_total: 10,
-      unchecked_coverage_percent: 46.913,
+      unchecked_coverage_percent: 46.1833,
     });
 
     expect(output).toMatchObject({
       comparable_features: 2,
-      targets_resolved_total: 30,
-      evaluated_targets_total: 25,
+      targets_resolved_total: 31,
+      evaluated_targets_total: 26,
       unchecked_targets_total: 10,
-      target_coverage_percent: 37.7322,
-      unchecked_coverage_percent: 46.913,
+      target_coverage_percent: 39.8527,
+      unchecked_coverage_percent: 46.1833,
       all_clear: false,
     });
-    expect(structured.totalCount).toBe(35);
+    expect(structured.totalCount).toBe(36);
 
-    // First page of ten: and_chr 154 and android 154 lack data for the extension key only.
+    // First page of ten: and_chr 156 and android 156 lack data for the extension key only.
     expect(output.results[0]?.unchecked_targets).toEqual([
-      { agent: 'and_qq', version_token: '14.9', reason: 'no_bcd_browser', usage_percent: 0.0915 },
-      { agent: 'and_uc', version_token: '15.5', reason: 'no_bcd_browser', usage_percent: 0.6358 },
+      { agent: 'and_qq', version_token: '14.9', reason: 'no_bcd_browser', usage_percent: 0.1276 },
+      { agent: 'and_uc', version_token: '15.5', reason: 'no_bcd_browser', usage_percent: 0.4802 },
     ]);
     expect(
       output.results[1]?.unchecked_targets?.map((row) => `${tokenOf(row)} ${row.reason}`),
     ).toEqual([
-      'and_chr 154 no_bcd_data',
+      'and_chr 156 no_bcd_data',
       'and_qq 14.9 no_bcd_browser',
       'and_uc 15.5 no_bcd_browser',
-      'android 154 no_bcd_data',
+      'android 156 no_bcd_data',
     ]);
     expect(output.unchecked_targets.map((row) => `${tokenOf(row)} ${row.reason}`)).toEqual([
-      'and_chr 154 no_bcd_data',
+      'and_chr 156 no_bcd_data',
       'and_qq 14.9 no_bcd_browser',
       'and_uc 15.5 no_bcd_browser',
-      'android 154 no_bcd_data',
+      'android 156 no_bcd_data',
     ]);
     expect(output.targets_resolved.filter((row) => !row.evaluated).map(tokenOf)).toEqual([
-      'and_chr 154',
-      'android 154',
+      'and_chr 156',
+      'android 156',
     ]);
 
     expect(text[0]).toContain(
-      'Evaluated for every compared feature: 25 of 35 target versions (37.7322% of tracked traffic) · not evaluated: 10 (46.913%)',
+      'Evaluated for every compared feature: 26 of 36 target versions (39.8527% of global traffic) · not evaluated: 10 (46.1833%)',
     );
     expect(text[0]).toContain(
-      '  - evaluated on 30 of 35 target versions (83.9128% of tracked traffic) · failing 0 · not evaluated 5 (0.7324%)',
+      '  - evaluated on 31 of 36 target versions (85.4282% of global traffic) · failing 0 · not evaluated 5 (0.6078%)',
     );
     expect(text[0]).toContain(
-      '  - evaluated on 25 of 35 target versions (37.7322% of tracked traffic) · failing 0 · not evaluated 10 (46.913%)',
+      '  - evaluated on 26 of 36 target versions (39.8527% of global traffic) · failing 0 · not evaluated 10 (46.1833%)',
     );
-    expect(text[0]).toContain('  - not evaluated on and_chr 154 (no_bcd_data, 44.0186% usage)');
-    expect(text[0]).toContain('| and_chr 154 | chrome_android 154 (index');
-    expect(text[0]).toContain('| and_chr 154 | no_bcd_data | 44.0186% |');
-    expect(text[1]).toContain('**Not evaluated:** 10 of 35 target versions');
+    expect(text[0]).toContain('  - not evaluated on and_chr 156 (no_bcd_data, 42.7908% usage)');
+    expect(text[0]).toContain('| and_chr 156 | chrome_android 156 (index');
+    expect(text[0]).toContain('| and_chr 156 | no_bcd_data | 42.7908% |');
+    expect(text[1]).toContain('**Not evaluated:** 10 of 36 target versions');
   });
 
   it('token sets are deduplicated and disjoint per result and in the aggregate, on every page', async () => {
@@ -451,7 +451,7 @@ describe('#7 — coverage counts only the targets that were evaluated', () => {
         targets.coverage(tokens.filter((token) => !skipped.includes(token))),
       );
     }
-    expect(pages[0]?.output.results[2]).toMatchObject({ verdict: 'fails', failing_total: 3 });
+    expect(pages[0]?.output.results[2]).toMatchObject({ verdict: 'fails', failing_total: 2 });
   });
 
   it('an unevaluated target beside a supported one is inconclusive, never clears', async () => {
@@ -556,7 +556,7 @@ describe('#26 — a multi-key id is judged on web-features’ feature-level supp
       });
       expect(item.compat_keys).toHaveLength(10);
     }
-    expect(output.results.map((item) => item.compat_keys_total)).toEqual([61, 84]);
+    expect(output.results.map((item) => item.compat_keys_total)).toEqual([61, 99]);
     expect(output).toMatchObject({
       comparable_features: 2,
       evaluated_targets_total: 8,
@@ -569,13 +569,13 @@ describe('#26 — a multi-key id is judged on web-features’ feature-level supp
     expect(text[0]).toContain('  - support_source: web_features_feature');
   });
 
-  it('grid on defaults: inconclusive, 24 evaluated, 11 unchecked (5 no_bcd_browser, 6 no_feature_level_data)', async () => {
+  it('grid on defaults: inconclusive, 25 evaluated, 11 unchecked (5 no_bcd_browser, 6 no_feature_level_data)', async () => {
     const { first, failing, unchecked } = await wholeRows(['grid'], 'defaults', 0);
     expect(first.output.results[0]).toMatchObject({
       verdict: 'inconclusive',
       support_source: 'web_features_feature',
       failing_total: 0,
-      evaluated_total: 24,
+      evaluated_total: 25,
       unchecked_total: 11,
     });
     expect(first.output.results[0]).not.toHaveProperty('guidance');
@@ -584,7 +584,7 @@ describe('#26 — a multi-key id is judged on web-features’ feature-level supp
     expect(unchecked.map((row) => `${tokenOf(row)} ${row.reason}`)).toEqual([
       'and_qq 14.9 no_bcd_browser',
       'and_uc 15.5 no_bcd_browser',
-      'android 154 no_feature_level_data',
+      'android 156 no_feature_level_data',
       'kaios 3.0-3.1 no_bcd_browser',
       'kaios 2.5 no_bcd_browser',
       'op_mini all no_bcd_browser',
@@ -596,7 +596,7 @@ describe('#26 — a multi-key id is judged on web-features’ feature-level supp
     ]);
     expect(first.output).toMatchObject({
       comparable_features: 1,
-      evaluated_targets_total: 24,
+      evaluated_targets_total: 25,
       unchecked_targets_total: 11,
     });
   });
@@ -690,18 +690,18 @@ describe('#26 — a multi-key id is judged on web-features’ feature-level supp
     expect(at.output.all_clear).toBe(true);
   });
 
-  it('a mixed call keeps the D50 intersection: :has() and grid on defaults evaluate 24 of 35', async () => {
+  it('a mixed call keeps the D50 intersection: :has() and grid on defaults evaluate 25 of 36', async () => {
     const { first, aggregate } = await wholeRows(['css.selectors.has', 'grid'], 'defaults', 1);
     const [has, grid] = first.output.results;
-    expect(has).toMatchObject({ verdict: 'inconclusive', evaluated_total: 30, unchecked_total: 5 });
+    expect(has).toMatchObject({ verdict: 'inconclusive', evaluated_total: 31, unchecked_total: 5 });
     expect(grid).toMatchObject({
       verdict: 'inconclusive',
-      evaluated_total: 24,
+      evaluated_total: 25,
       unchecked_total: 11,
     });
     expect(first.output).toMatchObject({
       comparable_features: 2,
-      evaluated_targets_total: 24,
+      evaluated_targets_total: 25,
       unchecked_targets_total: 11,
       all_clear: false,
     });
@@ -716,27 +716,27 @@ describe('#26 — a multi-key id is judged on web-features’ feature-level supp
 
   it('a target several features left unchecked takes the earliest compared result’s reason', async () => {
     const reasonOf = async (features: string[]) => {
-      const { output } = await call({ features, targets: 'android 154' });
+      const { output } = await call({ features, targets: 'android 156' });
       return output.unchecked_targets.map((row) => `${tokenOf(row)} ${row.reason}`);
     };
     expect(await reasonOf(['grid', 'webextensions.api.action.enable'])).toEqual([
-      'android 154 no_feature_level_data',
+      'android 156 no_feature_level_data',
     ]);
     expect(await reasonOf(['webextensions.api.action.enable', 'grid'])).toEqual([
-      'android 154 no_bcd_data',
+      'android 156 no_bcd_data',
     ]);
   });
 });
 
 describe('#6 — target rows are paged, whole-query answers are not', () => {
   it.each([10, 5, 7])(
-    'a walk on defaults at target_limit %i reaches each of the 35 tokens exactly once',
+    'a walk on defaults at target_limit %i reaches each of the 36 tokens exactly once',
     async (limit) => {
       const tokens = (await getTargetsService()).queryTokens('defaults');
-      expect(tokens).toHaveLength(35);
+      expect(tokens).toHaveLength(36);
       const pages = await walk(DEFAULTS_FEATURES, 'defaults', limit);
 
-      expect(pages).toHaveLength(Math.ceil(35 / limit));
+      expect(pages).toHaveLength(Math.ceil(36 / limit));
       const seen: string[] = [];
       for (const page of pages) {
         const expected = tokens.slice(page.offset, page.offset + limit);
@@ -746,9 +746,9 @@ describe('#6 — target rows are paged, whole-query answers are not', () => {
           const indexes = rows.map((row) => tokens.indexOf(tokenOf(row)));
           expect(indexes).toEqual([...indexes].sort((a, b) => a - b));
         }
-        const remaining = page.offset + expected.length < 35;
+        const remaining = page.offset + expected.length < 36;
         expect(page.structured).toMatchObject({
-          totalCount: 35,
+          totalCount: 36,
           shown: expected.length,
           cap: limit,
           truncated: remaining,
@@ -759,7 +759,7 @@ describe('#6 — target rows are paged, whole-query answers are not', () => {
         seen.push(...pageTokens(page.output));
       }
       expect([...seen].sort()).toEqual([...tokens].sort());
-      expect(new Set(seen).size).toBe(35);
+      expect(new Set(seen).size).toBe(36);
     },
   );
 
@@ -768,17 +768,17 @@ describe('#6 — target rows are paged, whole-query answers are not', () => {
     const first = wholeQuery(pages[0] as (typeof pages)[number]);
     expect(first).toMatchObject({
       all_clear: false,
-      target_coverage_percent: 83.9128,
-      unchecked_coverage_percent: 0.7324,
-      targets_resolved_total: 30,
+      target_coverage_percent: 85.4282,
+      unchecked_coverage_percent: 0.6078,
+      targets_resolved_total: 31,
       unchecked_targets_total: 5,
-      evaluated_targets_total: 30,
+      evaluated_targets_total: 31,
       comparable_features: 3,
-      totalCount: 35,
+      totalCount: 36,
       cap: 10,
     });
     expect(first.results.map((item) => item.verdict)).toEqual(['inconclusive', 'fails', 'fails']);
-    expect(first.results.map((item) => item.failing_total)).toEqual([0, 3, 4]);
+    expect(first.results.map((item) => item.failing_total)).toEqual([0, 2, 3]);
     for (const page of pages) expect(wholeQuery(page)).toEqual(first);
     expectRangesMatchRows(pages, (await getTargetsService()).queryTokens('defaults'));
   });
@@ -791,21 +791,18 @@ describe('#6 — target rows are paged, whole-query answers are not', () => {
     );
     expect(first?.output.results[0]).toMatchObject({
       verdict: 'fails',
-      failing_total: 3,
+      failing_total: 2,
       failing_targets: [],
     });
     expect(first?.output.all_clear).toBe(false);
     expect(first?.text[0]).toContain('**fails** Array.fromAsync()');
-    expect(first?.text[0]).toContain('failing 3');
-    expect(first?.text[0]).toContain('  - on this page: 0 of 3 failing, 2 of 5 not evaluated');
+    expect(first?.text[0]).toContain('failing 2');
+    expect(first?.text[0]).toContain('  - on this page: 0 of 2 failing, 2 of 5 not evaluated');
     expect(first?.text[0]).not.toContain('fails on');
 
-    expect(second?.output.results[0]?.failing_targets.map(tokenOf)).toEqual([
-      'chrome 120',
-      'chrome 109',
-    ]);
-    expect(second?.text[0]).toContain('  - fails on chrome 120 → chrome 120 (unsupported)');
-    expect(second?.text[0]).toContain('  - on this page: 2 of 3 failing, 0 of 5 not evaluated');
+    expect(second?.output.results[0]?.failing_targets.map(tokenOf)).toEqual(['chrome 109']);
+    expect(second?.text[0]).toContain('  - fails on chrome 109 → chrome 109 (unsupported)');
+    expect(second?.text[0]).toContain('  - on this page: 1 of 2 failing, 0 of 5 not evaluated');
     expect(third?.output.results[0]?.failing_targets.map(tokenOf)).toEqual(['op_mob 80']);
     expect(third?.text[0]).toContain('  - fails on op_mob 80 → opera_android 80 (unsupported)');
   });
@@ -895,7 +892,7 @@ describe('#6 — target rows are paged, whole-query answers are not', () => {
       target_limit: 10,
     });
     expect(structured).toMatchObject({
-      totalCount: 35,
+      totalCount: 36,
       shown: 10,
       cap: 10,
       truncated: true,
@@ -905,24 +902,24 @@ describe('#6 — target rows are paged, whole-query answers are not', () => {
     expect(output.unchecked_targets).toEqual([]);
 
     expect(text[0]).toContain(
-      'Evaluated for every compared feature: 30 of 35 target versions (83.9128% of tracked traffic) · not evaluated: 5 (0.7324%)',
+      'Evaluated for every compared feature: 31 of 36 target versions (85.4282% of global traffic) · not evaluated: 5 (0.6078%)',
     );
     expect(text[0]).toContain(
-      'Compared 3 of 3 features · 30 of 35 target versions map to a browser-compat-data release',
+      'Compared 3 of 3 features · 31 of 36 target versions map to a browser-compat-data release',
     );
-    expect(text[0]).toContain('## Targets mapped to a release — 10 of 30 on this page');
+    expect(text[0]).toContain('## Targets mapped to a release — 10 of 31 on this page');
     expect(text[0]).toContain('## Not evaluated for every compared feature — 0 of 5 on this page');
     expect(text[0]).toContain('None of the 5 unevaluated target versions is on this page.');
-    expect(text[0]).toContain('| chrome 120 | chrome 120 (index 118) | yes |');
+    expect(text[0]).toContain('| chrome 109 | chrome 109 (index 107) | yes |');
     expect(text[0]).not.toContain('## Targets evaluated');
 
-    expect(text[1]).toContain('**Targets in query:** 35');
+    expect(text[1]).toContain('**Targets in query:** 36');
     expect(text[1]).toContain('**Targets on this page:** 10');
     expect(text[1]).toContain('**Page size (target_limit):** 10');
     expect(text[1]).toContain('**More targets remain:** yes');
     expect(text[1]).toContain('**Next page:** call again with target_offset 20');
     expect(text[1]).toContain(
-      '**Not evaluated:** 5 of 35 target versions were not evaluated for every compared feature (and_qq, and_uc, kaios, op_mini), together 0.7324% of tracked traffic. No feature is reported as clearing them.',
+      '**Not evaluated:** 5 of 36 target versions were not evaluated for every compared feature (and_qq, and_uc, kaios, op_mini), together 0.6078% of global traffic. No feature is reported as clearing them.',
     );
     // The trailer names agents and counts only; it never re-lists target rows.
     expect(text[1]).not.toMatch(/\d+\.\d+-\d/);
@@ -1017,15 +1014,15 @@ describe('#6 — a broad query stays bounded on both surfaces', () => {
 
   it('every page of 20 features against since 2000 stays under the pinned ceilings', async () => {
     const tokens = (await getTargetsService()).queryTokens('since 2000');
-    expect(tokens).toHaveLength(691);
+    expect(tokens).toHaveLength(695);
     expect(BROAD_FEATURES).toHaveLength(20);
 
     const pages = await walk(BROAD_FEATURES, 'since 2000', 10);
     expect(pages).toHaveLength(70);
     const seen = pages.flatMap((page) => [...new Set(pageTokens(page.output))]);
     expect([...seen].sort()).toEqual([...tokens].sort());
-    expect(pages[0]?.structured).toMatchObject({ totalCount: 691, shown: 10, cap: 10 });
-    expect(pages[69]?.structured).toMatchObject({ shown: 1, truncated: false });
+    expect(pages[0]?.structured).toMatchObject({ totalCount: 695, shown: 10, cap: 10 });
+    expect(pages[69]?.structured).toMatchObject({ shown: 5, truncated: false });
     expect(pages[0]?.output.comparable_features).toBe(20);
     for (const page of pages) expect(wholeQuery(page)).toEqual(wholeQuery(pages[0] as typeof page));
     expectRangesMatchRows(pages, tokens);
@@ -1048,7 +1045,7 @@ describe('#6 — a broad query stays bounded on both surfaces', () => {
     expectUnderCeilings(largest(pages));
   });
 
-  /** The 20 web-features ids owning the most compat keys (svg 614 … webdriver-bidi 116). */
+  /** The 20 web-features ids owning the most compat keys (svg 618 … webdriver-bidi 116). */
   const LARGEST_MULTI_KEY = [
     'svg',
     'anchor-positioning',
@@ -1130,7 +1127,7 @@ describe('#25 — compat_keys is bounded per result', () => {
     });
     for (const item of output.results) {
       expect(item.compat_keys).toHaveLength(10);
-      expect(item.compat_keys_total).toBe(614);
+      expect(item.compat_keys_total).toBe(618);
     }
     const serialized = Buffer.byteLength(
       JSON.stringify({ content: result.content, structuredContent: result.structuredContent }),
@@ -1295,7 +1292,7 @@ describe('#27 — a failing row carries the support statement behind its verdict
 
   it('an unsupported and a preview_only row carry none of the statement fields', async () => {
     const { output, text } = await call({
-      features: ['javascript.builtins.Array.fromAsync', 'api.AnimationTimeline.duration'],
+      features: ['javascript.builtins.Array.fromAsync', 'api.CSS.Hz_static'],
       targets: 'chrome 120, firefox 140',
     });
     const [unsupported, preview] = output.results;
@@ -1317,11 +1314,11 @@ describe('#28 — failing_ranges summarizes every failing target across the whol
     expect(pages).toHaveLength(4);
     for (const page of pages) {
       expect(page.output.results[0]?.failing_ranges).toEqual([
-        { agent: 'chrome', newest: '120', oldest: '109', count: 2, verdict: 'unsupported' },
+        { agent: 'chrome', newest: '109', oldest: '109', count: 1, verdict: 'unsupported' },
         { agent: 'op_mob', newest: '80', oldest: '80', count: 1, verdict: 'unsupported' },
       ]);
       expect(page.text[0]).toContain(
-        '  - failing_ranges (whole query): chrome 120 to 109: 2 unsupported; op_mob 80: 1 unsupported',
+        '  - failing_ranges (whole query): chrome 109: 1 unsupported; op_mob 80: 1 unsupported',
       );
     }
     expectRangesMatchRows(pages, (await getTargetsService()).queryTokens('defaults'));
@@ -1376,9 +1373,9 @@ describe('#28 — failing_ranges summarizes every failing target across the whol
       feature: 'anchor-positioning',
       targets: 'last 3 chrome versions',
       ranges: [
-        { agent: 'chrome', newest: '154', oldest: '152', count: 3, verdict: 'no_feature_support' },
+        { agent: 'chrome', newest: '156', oldest: '154', count: 3, verdict: 'no_feature_support' },
       ],
-      line: 'chrome 154 to 152: 3 no_feature_support',
+      line: 'chrome 156 to 154: 3 no_feature_support',
     },
   ])('$label', async ({ feature, targets, ranges, line }) => {
     const pages = await walk([feature], targets, 10);

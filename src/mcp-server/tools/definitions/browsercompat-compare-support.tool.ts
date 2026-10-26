@@ -113,7 +113,7 @@ const UncheckedTargetSchema = z.object({
     .describe(
       'no_bcd_browser when the agent has no browser-compat-data counterpart, unknown_version when the token maps to no release, no_bcd_data when a compared key records nothing for that browser, no_feature_level_data when a feature judged on web-features’ feature-level support has no answer for the target — a browser outside the Baseline core set, or a release before a ≤ bound — so call again with one of its compat_keys for a key-level answer, no_comparable_feature when every entry in features was a miss or ambiguous so nothing was compared. In the top-level list a target unchecked by several compared features takes the reason of the first of them.',
     ),
-  usage_percent: z.number().describe('Share of tracked global traffic this target covers.'),
+  usage_percent: z.number().describe('Percentage points of global traffic this target covers.'),
 });
 
 const ResultSchema = z.object({
@@ -160,7 +160,7 @@ const ResultSchema = z.object({
   evaluated_coverage_percent: z
     .number()
     .optional()
-    .describe('Share of tracked global traffic the targets evaluated for this feature cover.'),
+    .describe('Percentage points of global traffic the targets evaluated for this feature cover.'),
   unchecked_total: z
     .number()
     .int()
@@ -171,7 +171,9 @@ const ResultSchema = z.object({
   unchecked_coverage_percent: z
     .number()
     .optional()
-    .describe('Share of tracked global traffic the targets not evaluated for this feature cover.'),
+    .describe(
+      'Percentage points of global traffic the targets not evaluated for this feature cover.',
+    ),
   unchecked_targets: z
     .array(UncheckedTargetSchema.describe('A target this feature was not evaluated against.'))
     .optional()
@@ -226,7 +228,7 @@ const tokenOf = (target: { agent: string; version_token: string }) =>
 
 export const browsercompatCompareSupport = tool('browsercompat_compare_support', {
   description:
-    'Compute whether a set of web features clears an explicit browserslist target query. Compares up to 20 features per call; up to 100 may be sent, and entries past the 20th come back unevaluated in omitted_features for the next call. Every call evaluates the whole query: each feature gets a verdict, the count of failing targets, those targets grouped into runs of consecutive query targets per browser in failing_ranges, and its own evaluated and unevaluated target counts with the share of tracked traffic each covers. The target rows behind those numbers — which release each target maps to, which targets were not evaluated and why, and the failing and unevaluated targets of each feature, a failing row carrying the prefix, alternative name, or flag behind its verdict — cover at most ten query targets per call; page through them with target_offset and target_limit, and the verdicts, coverage, and totals stay identical on every page. A target counts as evaluated only where compatibility data was read for it, so a feature clears only when every target in the query was evaluated and supports it, and is inconclusive otherwise — a query that includes a browser with no compatibility data, as "defaults" does, never clears. A BCD key is judged on its own per-browser support. A web-features id spanning several keys, such as grid, is judged on the release web-features lists for the feature as a whole in each Baseline core browser, as support_source says; its other browsers are not evaluated.',
+    'Compute whether a set of web features clears an explicit browserslist target query. Compares up to 20 features per call; up to 100 may be sent, and entries past the 20th come back unevaluated in omitted_features for the next call. Every call evaluates the whole query: each feature gets a verdict, the count of failing targets, those targets grouped into runs of consecutive query targets per browser in failing_ranges, and its own evaluated and unevaluated target counts with the percentage points of global traffic each covers. The target rows behind those numbers — which release each target maps to, which targets were not evaluated and why, and the failing and unevaluated targets of each feature, a failing row carrying the prefix, alternative name, or flag behind its verdict — cover at most ten query targets per call; page through them with target_offset and target_limit, and the verdicts, coverage, and totals stay identical on every page. A target counts as evaluated only where compatibility data was read for it, so a feature clears only when every target in the query was evaluated and supports it, and is inconclusive otherwise — a query that includes a browser with no compatibility data, as "defaults" does, never clears. A BCD key is judged on its own per-browser support. A web-features id spanning several keys, such as grid, is judged on the release web-features lists for the feature as a whole in each Baseline core browser, as support_source says; its other browsers are not evaluated.',
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
 
   input: z.object({
@@ -242,7 +244,7 @@ export const browsercompatCompareSupport = tool('browsercompat_compare_support',
       .min(1)
       .max(500)
       .describe(
-        'A browserslist query, for example "defaults" or "> 0.5%, last 2 versions", 1 to 500 characters. Required: with no query browserslist would read config from the process working directory rather than from your project.',
+        'A self-contained browserslist query, for example "defaults" or "> 0.5%, last 2 versions", 1 to 500 characters. Config packages and custom configuration are unsupported; local config discovery is disabled.',
       ),
     resolve: z
       .boolean()
@@ -304,12 +306,12 @@ export const browsercompatCompareSupport = tool('browsercompat_compare_support',
     target_coverage_percent: z
       .number()
       .describe(
-        'Share of tracked global traffic covered by the targets evaluated for every compared feature; 0 when no feature was comparable.',
+        'Percentage points of global traffic covered by the targets evaluated for every compared feature; 0 when no feature was comparable.',
       ),
     unchecked_coverage_percent: z
       .number()
       .describe(
-        'Share of tracked global traffic covered by the targets counted in unchecked_targets_total.',
+        'Percentage points of global traffic covered by the targets counted in unchecked_targets_total.',
       ),
     results: z
       .array(ResultSchema.describe('One result per evaluated entry, in input order.'))
@@ -374,9 +376,9 @@ export const browsercompatCompareSupport = tool('browsercompat_compare_support',
     {
       reason: 'invalid_target_query',
       code: JsonRpcErrorCode.ValidationError,
-      when: 'browserslist rejected the targets query.',
+      when: 'browserslist rejected the targets query, or it requires config packages or custom configuration.',
       recovery:
-        'Fix the query and retry — call browsercompat_list_reference with topic browserslist_agents for the 19 valid agent ids. A negation-only query needs a base, e.g. "defaults, not dead" rather than "not dead".',
+        'Use a self-contained query without config packages or custom configuration — call browsercompat_list_reference with topic browserslist_agents for the 19 valid agent ids. A negation-only query needs a base, e.g. "defaults, not dead" rather than "not dead".',
       thrownBy: 'service',
     },
     {
@@ -685,12 +687,12 @@ export const browsercompatCompareSupport = tool('browsercompat_compare_support',
     }
     if (comparableFeatures === 0) {
       ctx.enrich({
-        uncheckedNotice: `No feature was comparable, so none of the ${tokens.length} target versions was evaluated (${uncheckedCoverage}% of tracked traffic). Resolve the miss and ambiguous entries and call again.`,
+        uncheckedNotice: `No feature was comparable, so none of the ${tokens.length} target versions was evaluated (${uncheckedCoverage}% of global traffic). Resolve the miss and ambiguous entries and call again.`,
       });
     } else if (uncheckedTargets.length > 0) {
       const agents = [...new Set(uncheckedTargets.map((target) => target.agent))].join(', ');
       ctx.enrich({
-        uncheckedNotice: `${uncheckedTargets.length} of ${tokens.length} target versions were not evaluated for every compared feature (${agents}), together ${uncheckedCoverage}% of tracked traffic. No feature is reported as clearing them.`,
+        uncheckedNotice: `${uncheckedTargets.length} of ${tokens.length} target versions were not evaluated for every compared feature (${agents}), together ${uncheckedCoverage}% of global traffic. No feature is reported as clearing them.`,
       });
     }
 
@@ -730,7 +732,7 @@ export const browsercompatCompareSupport = tool('browsercompat_compare_support',
       ...(result.comparable_features === 0
         ? ['No feature was comparable, so no target version was evaluated.']
         : []),
-      `Evaluated for every compared feature: ${result.evaluated_targets_total} of ${queryTotal} target versions (${result.target_coverage_percent}% of tracked traffic) · not evaluated: ${result.unchecked_targets_total} (${result.unchecked_coverage_percent}%)`,
+      `Evaluated for every compared feature: ${result.evaluated_targets_total} of ${queryTotal} target versions (${result.target_coverage_percent}% of global traffic) · not evaluated: ${result.unchecked_targets_total} (${result.unchecked_coverage_percent}%)`,
       `Compared ${result.comparable_features} of ${result.results.length} features · ${result.targets_resolved_total} of ${queryTotal} target versions map to a browser-compat-data release`,
       `**all_clear:** ${result.all_clear}`,
       ...(result.omitted_features ? [formatOmittedFeatures(result.omitted_features)] : []),
@@ -755,7 +757,7 @@ export const browsercompatCompareSupport = tool('browsercompat_compare_support',
       }
       if (item.unchecked_targets) {
         lines.push(
-          `  - evaluated on ${item.evaluated_total} of ${queryTotal} target versions (${item.evaluated_coverage_percent}% of tracked traffic) · failing ${item.failing_total} · not evaluated ${item.unchecked_total} (${item.unchecked_coverage_percent}%)`,
+          `  - evaluated on ${item.evaluated_total} of ${queryTotal} target versions (${item.evaluated_coverage_percent}% of global traffic) · failing ${item.failing_total} · not evaluated ${item.unchecked_total} (${item.unchecked_coverage_percent}%)`,
           `  - on this page: ${item.failing_targets.length} of ${item.failing_total} failing, ${item.unchecked_targets.length} of ${item.unchecked_total} not evaluated`,
         );
       }

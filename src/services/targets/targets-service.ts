@@ -1,31 +1,37 @@
 /**
  * @fileoverview Targets service — resolves browserslist queries to tokens, maps
  * caniuse agents onto BCD browsers, and supplies the caniuse-derived usage
- * figures: per-agent totals, query coverage, and the share of tracked traffic a
+ * figures: per-agent totals, query coverage, and the global traffic share a
  * feature would exclude.
  * @module services/targets/targets-service
  */
 
 import { validationError } from '@cyanheads/mcp-ts-core/errors';
 import type { CaniuseAgent, CaniuseFeature } from 'caniuse-lite';
+import { agents as bundledAgents } from 'caniuse-lite';
 import { bcdBrowserForAgent } from '@/data/browserslist-bcd-map.js';
 import { getBcdService } from '@/services/bcd/bcd-service.js';
 import type { ResolvedTarget, TargetResolution, UncheckedTarget } from './types.js';
 
 /**
  * Share of global traffic caniuse tracks: `usage_global` summed across every
- * agent of the bundled caniuse-lite, to one decimal. The tests pin it to the
- * bundled data, so a caniuse-lite bump that moves the figure fails until this
- * is updated.
+ * agent of the bundled caniuse-lite, to one decimal, derived on dataset load.
  */
-export const CANIUSE_TRACKED_PERCENT = 97.3;
+export const CANIUSE_TRACKED_PERCENT = Number(
+  Object.values(bundledAgents)
+    .reduce(
+      (sum, agent) =>
+        sum + Object.values(agent?.usage_global ?? {}).reduce((total, usage) => total + usage, 0),
+      0,
+    )
+    .toFixed(1),
+);
 
 /**
  * CC BY 4.0 attribution carried on every response that quotes a usage figure,
- * used verbatim. Every percentage here is a share of the traffic caniuse tracks
- * rather than of all traffic.
+ * used verbatim. Raw usage_global values are percentage points of global traffic.
  */
-export const CANIUSE_ATTRIBUTION = `Usage data from caniuse.com, © Can I Use contributors, CC BY 4.0. Figures are a share of the ~${CANIUSE_TRACKED_PERCENT}% of global traffic caniuse tracks.`;
+export const CANIUSE_ATTRIBUTION = `Usage data from caniuse.com, © Can I Use contributors, CC BY 4.0. Figures are percentage points of global traffic. The bundled data tracks ~${CANIUSE_TRACKED_PERCENT}% of global traffic; the remainder is untracked and unknown.`;
 
 /** Round a percentage to a stable precision so repeated calls agree byte for byte. */
 function percent(value: number): number {
@@ -68,7 +74,7 @@ export class TargetsService {
     return Object.keys(this.agents);
   }
 
-  /** Total tracked-traffic share attributed to one agent across all its versions. */
+  /** Percentage points of global traffic attributed to one agent across all its versions. */
   agentUsageTotal(agentId: string): number {
     const cached = this.usageTotals.get(agentId);
     if (cached !== undefined) return cached;
@@ -101,6 +107,19 @@ export class TargetsService {
    */
   queryTokens(query: string): string[] {
     try {
+      for (const node of this.browserslist.parse(query, { path: false })) {
+        if (
+          node.type === 'extends' ||
+          node.type === 'popularity_in_config_stats' ||
+          node.type === 'cover_config' ||
+          node.type === 'browserslist_config'
+        ) {
+          throw validationError(
+            'Config packages and custom configuration are unsupported. Use a self-contained browserslist query.',
+            { reason: 'invalid_target_query' },
+          );
+        }
+      }
       return this.browserslist(query, { path: false });
     } catch (error) {
       if (!isBrowserslistError(error)) throw error;
@@ -160,7 +179,7 @@ export class TargetsService {
   }
 
   /**
-   * Share of tracked global traffic that requiring a feature would exclude:
+   * Percentage points of global traffic that requiring a feature would exclude:
    * every agent/version pair whose caniuse stat letter is not `y`. Returns
    * `undefined` when the feature reaches no caniuse id — never zero.
    */
