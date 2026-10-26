@@ -1,6 +1,6 @@
 # browser-compat-mcp-server - Directory Structure
 
-Generated on: 2026-10-15 18:35:22
+Generated on: 2026-10-26 18:08:10
 
 ```text
 browser-compat-mcp-server/
@@ -26,6 +26,7 @@ browser-compat-mcp-server/
 ├── changelog/
 │   ├── 0.1.x/
 │   ├── 0.2.x/
+│   ├── 0.3.x/
 │   └── template.md
 ├── docs/
 │   └── design.md
@@ -37,6 +38,8 @@ browser-compat-mcp-server/
 │   ├── add-resource/
 │   │   └── SKILL.md
 │   ├── add-service/
+│   │   └── SKILL.md
+│   ├── add-skill/
 │   │   └── SKILL.md
 │   ├── add-test/
 │   │   └── SKILL.md
@@ -134,6 +137,9 @@ browser-compat-mcp-server/
 │   ├── prune-musl-packages.ts
 │   ├── release-github.ts
 │   └── tree.ts
+├── skills/
+│   └── browser-compat-guide/
+│       └── SKILL.md
 ├── src/
 │   ├── data/
 │   │   └── browserslist-bcd-map.ts
@@ -180,6 +186,8 @@ browser-compat-mcp-server/
 │   ├── integration/
 │   ├── prompts/
 │   ├── resources/
+│   ├── scripts/
+│   │   └── clean-mcpb.test.ts
 │   ├── services/
 │   │   ├── baseline/
 │   │   │   ├── baseline-service.test.ts
@@ -207,7 +215,8 @@ browser-compat-mcp-server/
 │   │   ├── compat-shapes.test.ts
 │   │   ├── literal-rendering.test.ts
 │   │   ├── support-boundaries.test.ts
-│   │   └── support-contracts.test.ts
+│   │   ├── support-contracts.test.ts
+│   │   └── support-regressions.test.ts
 │   └── utils/
 │       └── markdown-text.test.ts
 ├── .dockerignore
@@ -225,7 +234,9 @@ browser-compat-mcp-server/
 ├── Dockerfile
 ├── LICENSE
 ├── manifest.json
+├── mcp.json
 ├── package.json
+├── plugin.json
 ├── README.md
 ├── server.json
 ├── THIRD_PARTY_NOTICES.md

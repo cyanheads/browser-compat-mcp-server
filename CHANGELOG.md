@@ -2,6 +2,10 @@
 
 All notable changes to this project. Each entry links to its full per-version file in [changelog/](changelog/).
 
+## [0.3.0](changelog/0.3.x/0.3.0.md) — 2026-10-26
+
+Browser support evidence preserves uncertainty and qualifications, with a published workflow guide for project shipping decisions.
+
 ## [0.2.1](changelog/0.2.x/0.2.1.md) — 2026-10-15
 
 Multi-key web-features ids are judged on web-features' feature-level support. compat_keys is bounded, failing rows report the support statement and a whole-query failing_ranges summary, batch tools serve up to a cap and report the rest as omitted_features, and search matches singular and plural forms.
