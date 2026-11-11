@@ -47,6 +47,29 @@ function isBrowserslistError(error: unknown): error is Error & { browserslist: t
 
 type BrowserslistFn = typeof import('browserslist');
 
+/** Global traffic a feature excludes, and the part of it a vendor prefix recovers. */
+export interface ExcludedUsage {
+  /** Percentage points of global traffic without default, unprefixed, enabled support. */
+  excludedPercent: number;
+  /** Of `excludedPercent`, the points where the feature works only with a vendor prefix. */
+  prefixedPercent: number;
+}
+
+/** Whether a caniuse cell works by default, only with a vendor prefix, or not at all. */
+type StatSupport = 'default' | 'prefixed' | 'none';
+
+/**
+ * How one caniuse stat answers "does it work by default?". Stats lead with the
+ * support letter, then flags (`x` prefix required, `d` disabled by default),
+ * then `#n` note markers, which do not affect support.
+ */
+function statSupport(stat: string | undefined): StatSupport {
+  if (stat === undefined) return 'none';
+  const [letter, ...flags] = stat.split(' ');
+  if (letter !== 'y' || flags.includes('d')) return 'none';
+  return flags.includes('x') ? 'prefixed' : 'default';
+}
+
 /** Query resolution and usage weighting over browserslist plus caniuse-lite. */
 export class TargetsService {
   readonly agents: Record<string, CaniuseAgent | undefined>;
@@ -135,7 +158,10 @@ export class TargetsService {
 
   /**
    * Split browserslist tokens into targets that map onto a concrete BCD release
-   * and targets the server declines to evaluate, with the reason for each.
+   * and targets the server declines to evaluate, with the reason for each. A
+   * grouped token such as `ios_saf 15.0-15.1` maps each endpoint as a single
+   * token would, and spans every BCD release from the lower one's through the
+   * upper one's.
    */
   async resolveTargets(tokens: string[]): Promise<TargetResolution> {
     const bcd = await getBcdService();
@@ -157,7 +183,10 @@ export class TargetsService {
         continue;
       }
       const version = bcd.resolveTargetVersion(bcdBrowser, versionToken);
-      if (!version.resolved) {
+      const dash = versionToken.indexOf('-');
+      const upper =
+        dash > 0 ? bcd.resolveTargetVersion(bcdBrowser, versionToken.slice(dash + 1)) : version;
+      if (!version.resolved || !upper.resolved) {
         unchecked.push({
           agent,
           version_token: versionToken,
@@ -166,12 +195,16 @@ export class TargetsService {
         });
         continue;
       }
+      const later = bcd
+        .releasesBetween(bcdBrowser, version.index, upper.index)
+        .map((release) => ({ index: release.index, version: release.version }));
       resolved.push({
         agent,
         version_token: versionToken,
         bcd_browser: bcdBrowser,
         bcd_version: version.version,
         bcd_release_index: version.index,
+        span: [{ index: version.index, version: version.version }, ...later],
       });
     }
 
@@ -180,28 +213,44 @@ export class TargetsService {
 
   /**
    * Percentage points of global traffic that requiring a feature would exclude:
-   * every agent/version pair whose caniuse stat letter is not `y`. Returns
+   * every agent/version pair where some mapped caniuse stat is not `y`, or
+   * carries `x` (prefix required) or `d` (disabled by default). Partial,
+   * polyfilled, unknown, and missing stats all exclude. `prefixedPercent` is
+   * the excluded share where every stat is `y` without `d` and at least one
+   * needs the prefix. `spelledWithPrefix` marks a feature whose own name carries
+   * the prefix, so `x` describes it as written and counts as supported. Returns
    * `undefined` when the feature reaches no caniuse id — never zero.
    */
-  excludedUsage(caniuseIds: string[]): number | undefined {
+  excludedUsage(
+    caniuseIds: string[],
+    { spelledWithPrefix = false }: { spelledWithPrefix?: boolean } = {},
+  ): ExcludedUsage | undefined {
     const features = caniuseIds
       .map((id) => this.caniuseFeature(id))
       .filter((feature): feature is CaniuseFeature => feature !== undefined);
     if (features.length === 0) return undefined;
 
     let excluded = 0;
+    let prefixed = 0;
     for (const [agentId, agent] of Object.entries(this.agents)) {
       if (!agent) continue;
       for (const [version, usage] of Object.entries(agent.usage_global)) {
         if (usage === 0) continue;
-        const supported = features.every((feature) => {
-          const stat = feature.stats[agentId]?.[version];
-          return stat !== undefined && stat.split(' ')[0] === 'y';
-        });
-        if (!supported) excluded += usage;
+        let cell: StatSupport = 'default';
+        for (const feature of features) {
+          const support = statSupport(feature.stats[agentId]?.[version]);
+          if (support === 'none') {
+            cell = 'none';
+            break;
+          }
+          if (support === 'prefixed' && !spelledWithPrefix) cell = 'prefixed';
+        }
+        if (cell === 'default') continue;
+        excluded += usage;
+        if (cell === 'prefixed') prefixed += usage;
       }
     }
-    return percent(excluded);
+    return { excludedPercent: percent(excluded), prefixedPercent: percent(prefixed) };
   }
 }
 

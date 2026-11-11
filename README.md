@@ -49,7 +49,7 @@ The [browser-compat-guide](./skills/browser-compat-guide/SKILL.md) covers assess
 
 ### `browsercompat_list_reference` <sub>tool</sub>
 
-- Required `topic`: `bcd_namespaces` (12), `bcd_browsers` (17), `browserslist_agents` (19), `baseline_states` (4), `groups` (104), or `snapshots` (11). Group and snapshot ids feed the search filters.
+- Required `topic`: `bcd_namespaces` (12), `bcd_browsers` (17), `browserslist_agents` (19), `baseline_states` (4), `groups` (105), or `snapshots` (11). Group and snapshot ids feed the search filters.
 - Entries carry `id`, `label`, and `detail`, plus `count`, `reported`, `bcd_browser`, `usage_percent`, `maps_from`, or `spec_url` where applicable. An agent's `bcd_browser: null` means support comparisons cannot evaluate it and report it in `unchecked_targets`.
 
 ---
@@ -65,7 +65,7 @@ The [browser-compat-guide](./skills/browser-compat-guide/SKILL.md) covers assess
 ### `browsercompat_check_baseline` <sub>tool</sub>
 
 - BCD keys or web-features ids, 1–200 characters each. Up to 100 are accepted and the first 20 are evaluated in input order; the rest come back verbatim in `omitted_features`. More than 100 is rejected, and a whitespace-only entry returns `invalid_feature_input`.
-- Results carry Baseline state and dates, `limiting_browser`, `deprecated`, `experimental`, and `discouraged`, plus `usage_percent_excluded` and `usage_source` where caniuse covers the feature. Usage is left out when unavailable, never reported as zero.
+- Results carry Baseline state and dates, `limiting_browser`, `deprecated`, `experimental`, and `discouraged`, plus `usage_percent_excluded`, `usage_percent_prefixed`, and `usage_source` where caniuse covers the feature. `usage_percent_excluded` is the traffic without default, unprefixed, unflagged support; `usage_percent_prefixed` is the part of it a vendor prefix recovers. Usage is left out when unavailable, never reported as zero.
 - `all_widely_available` is true only when every entry resolves at `widely` and none was omitted; it does not assess deprecation.
 
 ---
@@ -74,7 +74,7 @@ The [browser-compat-guide](./skills/browser-compat-guide/SKILL.md) covers assess
 
 - `query`, 1–100 characters, accepts names, keywords, or notation such as `Array.prototype.at`, `display: grid`, or `<dialog>`. Combine `namespace` (12 BCD namespaces), `baseline` (`widely`, `newly`, `limited`, `not_mapped`), `group` (including nested groups), and `snapshot` (such as `ecmascript-2023`).
 - `matched_on` says why a result ranked where it did, and `support_summary` covers the seven Baseline core browsers: `Firefox 33 (flagged)`, `Safari 3 (prefixed)`, `Chrome 94 (partial)`, and `Edge ≤18` preserve the selected verdict and addition bound; `—` means unsupported, removed, or preview-only, and `?` means unknown. Typed failures: `invalid_query` (zero searchable tokens), `unknown_group`, `unknown_snapshot`.
-- Page with `limit` (default 10, at most 50; larger values are served as 50 and reported in `cap`) and `offset` (default 0); `totalCount` and `nextOffset` drive paging. Zero hits succeed with a notice naming a filter to drop.
+- Page with `limit` (default 10, 1–1000; `cap` reports the requested size) and `offset` (default 0); `totalCount` and `nextOffset` drive paging. Zero hits succeed with a notice naming a filter to drop.
 
 ---
 
@@ -82,7 +82,7 @@ The [browser-compat-guide](./skills/browser-compat-guide/SKILL.md) covers assess
 
 - Up to 20 features per call against a required self-contained `targets` browserslist query, such as `defaults` or `> 0.5%, last 2 versions`; config packages and custom configuration are rejected, and local config discovery is disabled. Up to 100 features are accepted and the rest come back in `omitted_features`, which makes `all_clear` false. Typed failures: `invalid_target_query`, `no_targets_resolved`, `invalid_feature_input`.
 - Each `verdict` is `clears`, `fails`, `inconclusive`, `miss`, or `ambiguous`. A feature clears only when every target in the query was evaluated and supports it, so a query that includes a browser with no compatibility data, as `defaults` does, never clears. `all_clear` is true only when every feature clears.
-- Results report `support_source`, `failing_ranges`, `failing_total`, and evaluated and unchecked totals with coverage percentages. Target rows page with `target_offset` (default 0) and `target_limit` (default 10, at most 10; larger values are served as 10 and reported in `cap`); verdicts and totals are the same on every page, and `totalCount` and `nextOffset` drive paging.
+- Results report `support_source`, `failing_ranges`, `failing_total`, and evaluated and unchecked totals with coverage percentages. Target rows page with `target_offset` (default 0) and `target_limit` (default 10, 1–1000; `cap` reports the requested size); verdicts and totals are the same on every page, and `totalCount` and `nextOffset` drive paging.
 
 ---
 
@@ -90,12 +90,12 @@ The [browser-compat-guide](./skills/browser-compat-guide/SKILL.md) covers assess
 
 | Package | Version | License | Supplies |
 |:---|:---|:---|:---|
-| [`@mdn/browser-compat-data`](https://github.com/mdn/browser-compat-data) | `^8.1.7` | CC0-1.0 | Per-browser support, standards status, MDN and specification links |
-| [`web-features`](https://github.com/web-platform-dx/web-features) | `^3.44.0` | Apache-2.0 | Baseline state and dates, feature-level core-browser support, discouraged flags, groups, ECMAScript snapshots |
-| [`caniuse-lite`](https://github.com/browserslist/caniuse-lite) | `^1.0.30001819` | CC-BY-4.0 | Usage weighting, plus feature titles for the search index |
-| [`browserslist`](https://github.com/browserslist/browserslist) | `^4.29.4` | MIT | Target query resolution and coverage figures |
+| [`@mdn/browser-compat-data`](https://github.com/mdn/browser-compat-data) | `^8.1.8` | CC0-1.0 | Per-browser support, standards status, MDN and specification links |
+| [`web-features`](https://github.com/web-platform-dx/web-features) | `^3.45.0` | Apache-2.0 | Baseline state and dates, feature-level core-browser support, discouraged flags, groups, ECMAScript snapshots |
+| [`caniuse-lite`](https://github.com/browserslist/caniuse-lite) | `^1.0.30001823` | CC-BY-4.0 | Usage weighting, plus feature titles for the search index |
+| [`browserslist`](https://github.com/browserslist/browserslist) | `^4.29.5` | MIT | Target query resolution and coverage figures |
 
-CC BY 4.0 requires attribution wherever the caniuse data travels, so every response carrying a usage figure carries this string: `Usage data from caniuse.com, © Can I Use contributors, CC BY 4.0. Figures are percentage points of global traffic. The bundled data tracks ~97.5% of global traffic; the remainder is untracked and unknown.` Values are raw global percentages, without normalization to tracked traffic. Full license texts and notices are in [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md).
+CC BY 4.0 requires attribution wherever the caniuse data travels, so every response carrying a usage figure carries this string: `Usage data from caniuse.com, © Can I Use contributors, CC BY 4.0. Figures are percentage points of global traffic. The bundled data tracks ~97.6% of global traffic; the remainder is untracked and unknown.` Values are raw global percentages, without normalization to tracked traffic. Full license texts and notices are in [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md).
 
 ---
 
@@ -201,7 +201,7 @@ MCP_TRANSPORT_TYPE=http MCP_HTTP_PORT=3010 bun run start:http
 
 ### Prerequisites
 
-- [Bun v1.4.0](https://bun.sh/) or higher (or Node.js v24+).
+- [Bun v1.4.4](https://bun.sh/) or higher (or Node.js v24+).
 - No API keys, accounts, or network access required — every dataset ships with the package.
 
 ### Installation

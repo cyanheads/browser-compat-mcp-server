@@ -7,7 +7,7 @@
  */
 
 import { JsonRpcErrorCode } from '@cyanheads/mcp-ts-core/errors';
-import { createMockContext, getEnrichment } from '@cyanheads/mcp-ts-core/testing';
+import { createMockContext, getEnrichment, runToolContract } from '@cyanheads/mcp-ts-core/testing';
 import { describe, expect, it } from 'vitest';
 import { browsercompatCompareSupport } from '@/mcp-server/tools/definitions/browsercompat-compare-support.tool.js';
 
@@ -33,6 +33,9 @@ async function runAllPages(features: string[], targets: string) {
   }
   return pages;
 }
+
+const tokenOf = (row: { agent: string; version_token: string }) =>
+  `${row.agent} ${row.version_token}`;
 
 describe('browsercompat_compare_support — worked example: defaults', () => {
   const FEATURES = [
@@ -68,8 +71,8 @@ describe('browsercompat_compare_support — worked example: defaults', () => {
 
   it('reports coverage figures matching the real caniuse-derived percentages', async () => {
     const { result } = await run(FEATURES, 'defaults');
-    expect(result.target_coverage_percent).toBeCloseTo(85.4282, 3);
-    expect(result.unchecked_coverage_percent).toBeCloseTo(0.6078, 3);
+    expect(result.target_coverage_percent).toBeCloseTo(85.0052, 3);
+    expect(result.unchecked_coverage_percent).toBeCloseTo(0.6718, 3);
   });
 
   it('0 of 3 features clears — css.selectors.has is inconclusive over the 5 unmapped tokens, the other two fail', async () => {
@@ -78,9 +81,9 @@ describe('browsercompat_compare_support — worked example: defaults', () => {
     expect(result.results[0]).toMatchObject({
       failing_total: 0,
       evaluated_total: 31,
-      evaluated_coverage_percent: 85.4282,
+      evaluated_coverage_percent: 85.0052,
       unchecked_total: 5,
-      unchecked_coverage_percent: 0.6078,
+      unchecked_coverage_percent: 0.6718,
     });
     expect(result.all_clear).toBe(false);
   });
@@ -160,6 +163,108 @@ describe('browsercompat_compare_support — verdicts', () => {
     expect(result.unchecked_targets).toContainEqual(
       expect.objectContaining({ agent: 'ie', version_token: '11', reason: 'no_bcd_data' }),
     );
+  });
+});
+
+describe('browsercompat_compare_support — a grouped token is judged at every release it spans (#38)', () => {
+  /** Both surfaces of one assembled call: the parsed output and the format() text. */
+  async function contract(features: string[], targets: string) {
+    const result = await runToolContract(browsercompatCompareSupport, { features, targets });
+    expect(result.isError).not.toBe(true);
+    const text = result.content.flatMap((block) => (block.type === 'text' ? [block.text] : []));
+    return {
+      output: browsercompatCompareSupport.output.parse(result.structuredContent),
+      lines: (text[0] ?? '').split('\n'),
+    };
+  }
+  const failingLines = (lines: string[]) =>
+    lines.filter((line) => line.startsWith('  - fails on '));
+
+  it('ios_saf 15.0-15.1 fails both RTCStats keys BCD records removed in 15.1, at that release', async () => {
+    /** BCD 8.1.8 safari_ios for both keys: version_added 11, version_removed 15.1, version_last 15. */
+    const features = [
+      'api.RTCStatsReport.type_inbound-rtp.framesDecoded',
+      'api.RTCStatsReport.type_outbound-rtp.framesEncoded',
+    ];
+    const { output, lines } = await contract(features, 'ios_saf 15.1');
+    expect(output.all_clear).toBe(false);
+    expect(output.results.map((item) => item.verdict)).toEqual(['fails', 'fails']);
+    const row = {
+      agent: 'ios_saf',
+      version_token: '15.0-15.1',
+      bcd_browser: 'safari_ios',
+      bcd_version: '15.1',
+      verdict: 'removed',
+      version_added: '11',
+      version_removed: '15.1',
+      version_last: '15',
+    };
+    for (const item of output.results) {
+      expect(item).toMatchObject({ failing_total: 1, evaluated_total: 1, unchecked_total: 0 });
+      expect(item.failing_targets).toEqual([row]);
+      expect(item.failing_ranges).toEqual([
+        {
+          agent: 'ios_saf',
+          newest: '15.0-15.1',
+          oldest: '15.0-15.1',
+          count: 1,
+          verdict: 'removed',
+        },
+      ]);
+    }
+    expect(failingLines(lines)).toEqual(
+      Array(2).fill(
+        '  - fails on ios_saf 15.0-15.1 → safari_ios 15.1 (removed) · version_added 11 · version_removed 15.1 · version_last 15',
+      ),
+    );
+    // The mapping row keeps the lower endpoint's release and gains no field.
+    expect(output.targets_resolved).toEqual([
+      {
+        agent: 'ios_saf',
+        version_token: '15.0-15.1',
+        bcd_browser: 'safari_ios',
+        bcd_version: '15',
+        bcd_release_index: 22,
+        evaluated: true,
+      },
+    ]);
+    expect(lines).toContain('| ios_saf 15.0-15.1 | safari_ios 15 (index 22) | yes |');
+  });
+
+  it('a token already failing at its lower endpoint keeps that row: anchor-name on ios_saf 18.5-18.7 is unsupported at 18.5', async () => {
+    const { output, lines } = await contract(['css.properties.anchor-name'], 'ios_saf 18.5');
+    expect(output.results[0]?.failing_targets).toEqual([
+      {
+        agent: 'ios_saf',
+        version_token: '18.5-18.7',
+        bcd_browser: 'safari_ios',
+        bcd_version: '18.5',
+        verdict: 'unsupported',
+      },
+    ]);
+    expect(failingLines(lines)).toEqual([
+      '  - fails on ios_saf 18.5-18.7 → safari_ios 18.5 (unsupported)',
+    ]);
+    expect(output.targets_resolved).toEqual([
+      expect.objectContaining({ version_token: '18.5-18.7', bcd_version: '18.5' }),
+    ]);
+  });
+
+  it('single-version tokens and the next grouped token are judged as before', async () => {
+    const { output, lines } = await contract(
+      ['api.RTCStatsReport.type_inbound-rtp.framesDecoded'],
+      'safari 15.1, ios_saf 15.2, ios_saf 14.0',
+    );
+    expect(
+      output.results[0]?.failing_targets.map((row) => [tokenOf(row), row.bcd_version]),
+    ).toEqual([
+      ['ios_saf 15.2-15.3', '15.2'],
+      ['safari 15.1', '15.1'],
+    ]);
+    expect(failingLines(lines)).toEqual([
+      '  - fails on ios_saf 15.2-15.3 → safari_ios 15.2 (removed) · version_added 11 · version_removed 15.1 · version_last 15',
+      '  - fails on safari 15.1 → safari 15.1 (removed) · version_added 11 · version_removed 15.1 · version_last 15',
+    ]);
   });
 });
 
@@ -353,7 +458,7 @@ describe('browsercompat_compare_support — errors', () => {
 describe('browsercompat_compare_support — enrichment', () => {
   it('always echoes data_version, attribution, and the page arithmetic, with totalCount counting query targets', async () => {
     const { ctx } = await run(['has', 'grid', 'nope-xyz'], 'chrome 120, chrome 109');
-    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.7' });
+    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.8' });
     expect(getEnrichment(ctx).attribution).toMatch(/caniuse\.com/);
     expect(getEnrichment(ctx)).toMatchObject({
       totalCount: 2,
@@ -378,9 +483,9 @@ describe('browsercompat_compare_support — enrichment', () => {
       nextOffset: 33,
     });
     expect(result.targets_resolved.map((t) => `${t.agent} ${t.version_token}`)).toEqual([
-      'opera 135',
-      'opera 134',
-      'safari 27',
+      'opera 138',
+      'safari 27.2',
+      'safari 27.1',
     ]);
   });
 
@@ -398,7 +503,7 @@ describe('browsercompat_compare_support — enrichment', () => {
     const notice = getEnrichment(ctx).uncheckedNotice as string | undefined;
     expect(notice).toContain('5 of 36 target versions were not evaluated');
     expect(notice).toContain('(and_qq, and_uc, kaios, op_mini)');
-    expect(notice).toContain('0.6078% of global traffic');
+    expect(notice).toContain('0.6718% of global traffic');
   });
 
   it('uncheckedNotice is absent when every target resolves cleanly', async () => {
@@ -417,7 +522,7 @@ describe('browsercompat_compare_support — format()', () => {
     const text = (blocks?.[0] as { text: string } | undefined)?.text;
     expect(text).toContain('# 0 of 3 features clears `defaults`');
     expect(text).toContain(
-      'Evaluated for every compared feature: 31 of 36 target versions (85.4282% of global traffic) · not evaluated: 5 (0.6078%)',
+      'Evaluated for every compared feature: 31 of 36 target versions (85.0052% of global traffic) · not evaluated: 5 (0.6718%)',
     );
     expect(text).toContain(
       'Compared 3 of 3 features · 31 of 36 target versions map to a browser-compat-data release',
@@ -437,7 +542,7 @@ describe('browsercompat_compare_support — format()', () => {
     const text = (blocks?.[0] as { text: string } | undefined)?.text;
     expect(text).toContain('# 1 of 1 features clears `chrome 120`');
     expect(text).toContain(
-      '  - evaluated on 1 of 1 target versions (0.353% of global traffic) · failing 0 · not evaluated 0 (0%)',
+      '  - evaluated on 1 of 1 target versions (0.2226% of global traffic) · failing 0 · not evaluated 0 (0%)',
     );
     expect(text).toContain('Every target version was evaluated for every compared feature.');
   });
@@ -463,10 +568,10 @@ describe('browsercompat_compare_support — format()', () => {
       '  - support_source: bcd_key',
     ]);
     expect(lines.filter((line) => line.startsWith('  - compat_keys: '))).toEqual([
-      `  - compat_keys: 10 of 61: ${result.results[0]?.compat_keys?.join(', ')} — call browsercompat_get_feature with grid for all 61`,
+      `  - compat_keys: 10 of 69: ${result.results[0]?.compat_keys?.join(', ')} — call browsercompat_get_feature with grid for all 69`,
     ]);
     expect(lines).toContain(
-      '  - not evaluated on android 156 (no_feature_level_data, 0.0304% usage)',
+      '  - not evaluated on android 157 (no_feature_level_data, 0.0246% usage)',
     );
   });
 });

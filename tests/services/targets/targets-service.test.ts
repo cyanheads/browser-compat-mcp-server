@@ -14,6 +14,7 @@ import {
   getTargetsService,
   TargetsService,
 } from '@/services/targets/targets-service.js';
+import { syntheticUsage } from '../../helpers/synthetic-targets.js';
 
 describe('CANIUSE_ATTRIBUTION', () => {
   it('is the exact CC BY 4.0 attribution string used verbatim on every response (D20)', async () => {
@@ -56,13 +57,13 @@ describe('TargetsService#agentIds / agentUsageTotal', () => {
 
   it('reports per-agent usage totals matching the bundled snapshot', async () => {
     const targets = await getTargetsService();
-    expect(targets.agentUsageTotal('ie')).toBeCloseTo(0.2118, 3);
-    expect(targets.agentUsageTotal('edge')).toBeCloseTo(5.7104, 3);
-    expect(targets.agentUsageTotal('firefox')).toBeCloseTo(2.3061, 3);
-    expect(targets.agentUsageTotal('chrome')).toBeCloseTo(23.7987, 3);
-    expect(targets.agentUsageTotal('safari')).toBeCloseTo(3.0905, 3);
-    expect(targets.agentUsageTotal('opera')).toBeCloseTo(0.753, 3);
-    expect(targets.agentUsageTotal('ios_saf')).toBeCloseTo(14.8053, 3);
+    expect(targets.agentUsageTotal('ie')).toBeCloseTo(0.165, 3);
+    expect(targets.agentUsageTotal('edge')).toBeCloseTo(5.0546, 3);
+    expect(targets.agentUsageTotal('firefox')).toBeCloseTo(2.1263, 3);
+    expect(targets.agentUsageTotal('chrome')).toBeCloseTo(24.9624, 3);
+    expect(targets.agentUsageTotal('safari')).toBeCloseTo(2.913, 3);
+    expect(targets.agentUsageTotal('opera')).toBeCloseTo(0.925, 3);
+    expect(targets.agentUsageTotal('ios_saf')).toBeCloseTo(13.2284, 3);
   });
 
   it('is memoized — the same call twice returns the identical rounded value', async () => {
@@ -168,7 +169,7 @@ describe('TargetsService#coverage', () => {
 
   it('reports real caniuse-derived coverage for a known token', async () => {
     const targets = await getTargetsService();
-    expect(targets.coverage(['ie 11'])).toBeCloseTo(0.2118, 3);
+    expect(targets.coverage(['ie 11'])).toBeCloseTo(0.165, 3);
   });
 });
 
@@ -187,6 +188,7 @@ describe('TargetsService#resolveTargets', () => {
         bcd_browser: 'chrome',
         bcd_version: '100',
         bcd_release_index: 98,
+        span: [{ index: 98, version: '100' }],
       },
     ]);
     expect(unchecked).toContainEqual(
@@ -212,6 +214,7 @@ describe('TargetsService#resolveTargets', () => {
         bcd_browser: 'opera_android',
         bcd_version: null,
         bcd_release_index: -1,
+        span: [{ index: -1, version: null }],
       },
     ]);
   });
@@ -220,6 +223,114 @@ describe('TargetsService#resolveTargets', () => {
     const targets = await getTargetsService();
     const { unchecked } = await targets.resolveTargets(['op_mini']);
     expect(unchecked[0]).toMatchObject({ agent: 'op_mini', version_token: '' });
+  });
+
+  /** Release ordinals of BCD 8.1.8, as `version@index`. */
+  it.each([
+    { token: 'ios_saf 15.0-15.1', browser: 'safari_ios', span: '15@22 15.1@23' },
+    { token: 'samsung 5.0-5.4', browser: 'samsunginternet_android', span: '5.0@9 5.2@10 5.4@11' },
+    // BCD lists no 18.7 and no 11.1: each endpoint takes the nearest release at or below it.
+    { token: 'ios_saf 18.5-18.7', browser: 'safari_ios', span: '18.5@48 18.6@49' },
+    { token: 'samsung 11.1-11.2', browser: 'samsunginternet_android', span: '11.0@25 11.2@26' },
+    { token: 'android 4.4.3-4.4.4', browser: 'webview_android', span: '4.4.3@7' },
+    { token: 'ios_saf 14.0-14.4', browser: 'safari_ios', span: '14@20' },
+  ])(
+    'grouped token $token spans every BCD release from its lower endpoint’s through its upper endpoint’s',
+    async ({ token, browser, span }) => {
+      const targets = await getTargetsService();
+      const { resolved, unchecked } = await targets.resolveTargets([token]);
+      const [agent, version] = token.split(' ');
+      const releases = span.split(' ').map((entry) => {
+        const [name, index] = entry.split('@');
+        return { index: Number(index), version: name };
+      });
+      expect(unchecked).toEqual([]);
+      expect(resolved).toEqual([
+        {
+          agent,
+          version_token: version,
+          bcd_browser: browser,
+          bcd_version: releases[0]?.version,
+          bcd_release_index: releases[0]?.index,
+          span: releases,
+        },
+      ]);
+    },
+  );
+
+  it('a grouped token whose upper endpoint maps to no release is unknown_version, never judged on half its range', async () => {
+    const targets = await getTargetsService();
+    const { resolved, unchecked } = await targets.resolveTargets(['ios_saf 15.0-TP']);
+    expect(resolved).toEqual([]);
+    expect(unchecked).toEqual([
+      expect.objectContaining({
+        agent: 'ios_saf',
+        version_token: '15.0-TP',
+        reason: 'unknown_version',
+      }),
+    ]);
+  });
+});
+
+describe('TargetsService#excludedUsage — caniuse stat qualifiers', () => {
+  it.each([
+    ['y', 0, 0],
+    ['y #1', 0, 0],
+    ['y x', 1, 1],
+    ['y x #2', 1, 1],
+    ['y d #5', 1, 0],
+    ['a x', 1, 0],
+    ['n d', 1, 0],
+    ['n x d', 1, 0],
+    ['p d', 1, 0],
+    ['u', 1, 0],
+  ])('one mapped stat %j excludes %d point, %d of it prefixed', (stat, excluded, prefixed) => {
+    const service = syntheticUsage({ '1': 1 }, { f: { '1': stat } });
+    expect(service.excludedUsage(['f'])).toEqual({
+      excludedPercent: excluded,
+      prefixedPercent: prefixed,
+    });
+  });
+
+  it('a missing stat excludes the cell, not as prefixed', () => {
+    expect(syntheticUsage({ '1': 1 }, { f: {} }).excludedUsage(['f'])).toEqual({
+      excludedPercent: 1,
+      prefixedPercent: 0,
+    });
+  });
+
+  it.each([
+    ['y', 'y x', 1, 1],
+    ['y x', 'y', 1, 1],
+    ['y x', 'a', 1, 0],
+    ['a', 'y x', 1, 0],
+    ['y x', 'y d', 1, 0],
+    ['y d', 'y x', 1, 0],
+  ])(
+    'two mapped stats %j + %j exclude %d point, %d of it prefixed',
+    (first, second, excluded, prefixed) => {
+      const service = syntheticUsage({ '1': 1 }, { f: { '1': first }, g: { '1': second } });
+      expect(service.excludedUsage(['f', 'g'])).toEqual({
+        excludedPercent: excluded,
+        prefixedPercent: prefixed,
+      });
+    },
+  );
+
+  const mixedCells = { '1': 0.25, '2': 0.123456, '3': 1, '4': 2, '5': 0 };
+  const mixedStats = { f: { '1': 'y', '2': 'y x #1', '3': 'a x', '4': 'y d #5', '5': 'n' } };
+
+  it('sums every excluded cell across versions, rounded to 4 decimals, and skips zero-usage cells', () => {
+    expect(syntheticUsage(mixedCells, mixedStats).excludedUsage(['f'])).toEqual({
+      excludedPercent: 3.1235,
+      prefixedPercent: 0.1235,
+    });
+  });
+
+  it('spelledWithPrefix counts y x as supported and leaves a, d, and unsupported cells excluded', () => {
+    expect(
+      syntheticUsage(mixedCells, mixedStats).excludedUsage(['f'], { spelledWithPrefix: true }),
+    ).toEqual({ excludedPercent: 3, prefixedPercent: 0 });
   });
 });
 
@@ -234,8 +345,19 @@ describe('TargetsService#excludedUsage', () => {
     expect(targets.excludedUsage(['not-a-real-caniuse-id'])).toBeUndefined();
   });
 
-  it('computes the real excluded share for css-has (1.5832%)', async () => {
+  it('computes the real excluded share for css-has (1.4843%), none of it prefix-required', async () => {
     const targets = await getTargetsService();
-    expect(targets.excludedUsage(['css-has'])).toBeCloseTo(1.5832, 3);
+    expect(targets.excludedUsage(['css-has'])).toEqual({
+      excludedPercent: 1.4843,
+      prefixedPercent: 0,
+    });
+  });
+
+  it('bundled user-select-none: every excluded point is prefix-required Safari and iOS Safari (caniuse-lite 1.0.30001823)', async () => {
+    const targets = await getTargetsService();
+    expect(targets.excludedUsage(['user-select-none'])).toEqual({
+      excludedPercent: 16.3334,
+      prefixedPercent: 16.3334,
+    });
   });
 });

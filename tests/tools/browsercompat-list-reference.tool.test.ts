@@ -17,7 +17,7 @@ describe('browsercompat_list_reference — bcd_namespaces', () => {
     expect(result.topic).toBe('bcd_namespaces');
     expect(result.entries).toHaveLength(12);
     const api = result.entries.find((e) => e.id === 'api');
-    expect(api).toMatchObject({ label: 'Web APIs', count: 10_309 });
+    expect(api).toMatchObject({ label: 'Web APIs', count: 10_319 });
     expect(api?.detail).toContain('api.');
   });
 
@@ -30,7 +30,7 @@ describe('browsercompat_list_reference — bcd_namespaces', () => {
     const blocks = browsercompatListReference.format?.(result);
     const text = (blocks?.[0] as { text: string } | undefined)?.text;
     expect(text).toContain('## api — Web APIs');
-    expect(text).toContain('- count: 10309');
+    expect(text).toContain('- count: 10319');
   });
 });
 
@@ -95,7 +95,7 @@ describe('browsercompat_list_reference — browserslist_agents', () => {
 });
 
 describe('browsercompat_list_reference — baseline_states (D28)', () => {
-  it('reports the per-BCD-key split (not the per-feature split), summing to all 20,898 leaves', async () => {
+  it('reports the per-BCD-key split (not the per-feature split), summing to all 20,933 leaves', async () => {
     const ctx = createMockContext();
     const result = await browsercompatListReference.handler(
       browsercompatListReference.input.parse({ topic: 'baseline_states' }),
@@ -103,9 +103,9 @@ describe('browsercompat_list_reference — baseline_states (D28)', () => {
     );
     expect(result.entries).toHaveLength(4);
     const counts = Object.fromEntries(result.entries.map((e) => [e.id, e.count]));
-    expect(counts).toEqual({ widely: 8_965, newly: 1_226, limited: 5_583, not_mapped: 5_124 });
+    expect(counts).toEqual({ widely: 9_033, newly: 1_276, limited: 5_638, not_mapped: 4_986 });
     const total = Object.values(counts).reduce((a, b) => (a ?? 0) + (b ?? 0), 0);
-    expect(total).toBe(20_898);
+    expect(total).toBe(20_933);
   });
 
   it('maps_from carries the raw web-features value, null only for not_mapped', async () => {
@@ -120,13 +120,13 @@ describe('browsercompat_list_reference — baseline_states (D28)', () => {
 });
 
 describe('browsercompat_list_reference — groups and snapshots', () => {
-  it('lists 104 groups, sorted by id', async () => {
+  it('lists 105 groups, sorted by id', async () => {
     const ctx = createMockContext();
     const result = await browsercompatListReference.handler(
       browsercompatListReference.input.parse({ topic: 'groups' }),
       ctx,
     );
-    expect(result.entries).toHaveLength(104);
+    expect(result.entries).toHaveLength(105);
     const ids = result.entries.map((e) => e.id);
     expect(ids).toEqual([...ids].sort());
   });
@@ -179,6 +179,6 @@ describe('browsercompat_list_reference — enrichment', () => {
       browsercompatListReference.input.parse({ topic: 'groups' }),
       ctx,
     );
-    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.7' });
+    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.8' });
   });
 });

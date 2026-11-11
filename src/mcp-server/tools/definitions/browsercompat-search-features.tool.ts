@@ -19,12 +19,6 @@ import { getSearchService, tokenize } from '@/services/search/search-service.js'
 import { markdownText } from '@/utils/markdown-text.js';
 import { formatSupportSummary } from './compat-shapes.js';
 
-/** Rows one page returns at most; a larger limit is served at this size. */
-const LIMIT_CAP = 50;
-
-/** Hard ceiling on limit; values past it are rejected against the schema. */
-const LIMIT_MAX = 1000;
-
 const ResultSchema = z.object({
   bcd_key: z
     .string()
@@ -112,10 +106,10 @@ export const browsercompatSearchFeatures = tool('browsercompat_search_features',
       .number()
       .int()
       .min(1)
-      .max(LIMIT_MAX)
+      .max(1000)
       .default(10)
       .describe(
-        'Maximum results to return, at most 50 per call; a value from 51 to 1000 is served as 50. When matches remain, cap reports the size applied and nextOffset continues.',
+        'Results to return on this page, 1 to 1000; the page holds that many, fewer only once the matches run out. When matches remain past this page, nextOffset continues.',
       ),
     offset: z
       .number()
@@ -138,10 +132,7 @@ export const browsercompatSearchFeatures = tool('browsercompat_search_features',
     totalCount: z.number().describe('Matches across every page, before offset and limit apply.'),
     truncated: z.boolean().optional().describe('True when more matches remain past this page.'),
     shown: z.number().optional().describe('Number of results on this page.'),
-    cap: z
-      .number()
-      .optional()
-      .describe('The page size applied: limit, or 50 when limit was above 50.'),
+    cap: z.number().optional().describe('The page size requested in limit.'),
     nextOffset: z
       .number()
       .optional()
@@ -249,8 +240,7 @@ export const browsercompatSearchFeatures = tool('browsercompat_search_features',
     const hits = search.rank(query, filters);
     ctx.enrich.total(hits.length);
 
-    const limit = Math.min(input.limit, LIMIT_CAP);
-    const results = hits.slice(input.offset, input.offset + limit).map((hit) => {
+    const results = hits.slice(input.offset, input.offset + input.limit).map((hit) => {
       const leaf = hit.row.bcd_key === undefined ? undefined : bcd.leaf(hit.row.bcd_key);
       const summary =
         leaf === undefined
@@ -270,7 +260,7 @@ export const browsercompatSearchFeatures = tool('browsercompat_search_features',
 
     const nextOffset = input.offset + results.length;
     if (results.length > 0 && hits.length > nextOffset) {
-      ctx.enrich.truncated({ shown: results.length, cap: limit });
+      ctx.enrich.truncated({ shown: results.length, cap: input.limit });
       ctx.enrich({ nextOffset });
     }
 

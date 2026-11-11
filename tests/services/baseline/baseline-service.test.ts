@@ -99,7 +99,7 @@ describe('BaselineService#compatKeys / caniuseIds / discouraged', () => {
     expect(baseline.compatKeys('has')).toEqual(['css.selectors.has']);
   });
 
-  it('compatKeys returns an empty array for the 21 features that own no BCD keys', async () => {
+  it('compatKeys returns an empty array for the 20 features that own no BCD keys', async () => {
     const baseline = await getBaselineService();
     expect(baseline.compatKeys('intersection-observer-v2')).toEqual([]);
   });
@@ -198,9 +198,9 @@ describe('BaselineService#featureSupport / featureSupportRows — status.support
 });
 
 describe('BaselineService — groups, snapshots, core browsers', () => {
-  it('exposes 104 groups and 11 ECMAScript snapshots', async () => {
+  it('exposes 105 groups and 11 ECMAScript snapshots', async () => {
     const baseline = await getBaselineService();
-    expect(Object.keys(baseline.groups)).toHaveLength(104);
+    expect(Object.keys(baseline.groups)).toHaveLength(105);
     expect(Object.keys(baseline.snapshots)).toHaveLength(11);
   });
 

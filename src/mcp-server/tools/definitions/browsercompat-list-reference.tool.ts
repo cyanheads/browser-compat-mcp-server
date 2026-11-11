@@ -123,7 +123,7 @@ export const browsercompatListReference = tool('browsercompat_list_reference', {
         'snapshots',
       ])
       .describe(
-        'Which vocabulary to list: bcd_namespaces for the 12 top-level browser-compat-data namespaces, bcd_browsers for the 17 tracked browsers, browserslist_agents for the 19 browserslist ids mapped to browser-compat-data browsers, baseline_states for the 4 Baseline states, groups for the 104 web-features groups, or snapshots for the 11 ECMAScript snapshots.',
+        'Which vocabulary to list: bcd_namespaces for the 12 top-level browser-compat-data namespaces, bcd_browsers for the 17 tracked browsers, browserslist_agents for the 19 browserslist ids mapped to browser-compat-data browsers, baseline_states for the 4 Baseline states, groups for the 105 web-features groups, or snapshots for the 11 ECMAScript snapshots.',
       ),
   }),
 

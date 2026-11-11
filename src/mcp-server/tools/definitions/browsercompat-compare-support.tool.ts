@@ -20,7 +20,7 @@ import {
   renderDataVersion,
 } from '@/services/data-version/data-version-service.js';
 import { CANIUSE_ATTRIBUTION, getTargetsService } from '@/services/targets/targets-service.js';
-import type { ResolvedTarget, UncheckedTarget } from '@/services/targets/types.js';
+import type { ResolvedTarget, SpannedRelease, UncheckedTarget } from '@/services/targets/types.js';
 import { markdownText } from '@/utils/markdown-text.js';
 import {
   batchCompatKeys,
@@ -49,7 +49,7 @@ const FailingVerdictSchema = z
     'no_feature_support',
   ])
   .describe(
-    'Why this target failed. From a key: partial means the implementation does not meet the mandatory specified behavior, prefixed means it only ships under a vendor prefix or a different name, flagged means it only works behind a preference or runtime flag, removed means it shipped and was later removed before this target version, unsupported means it was never added, preview_only means it only works in a preview channel. From web-features’ feature-level support: before_feature_support means the target predates the release web-features lists for the feature, no_feature_support means web-features lists no release of this core browser for the feature — which also covers a feature it lists no release for at all, such as a discontinued one (mutation-events) that older releases shipped; call again with one of compat_keys for a key-level verdict on such a target.',
+    'Why this target failed. From a key: partial means the implementation does not meet the mandatory specified behavior, prefixed means it only ships under a vendor prefix or a different name, flagged means it only works behind a preference or runtime flag, removed means it shipped and was later removed, at or before the release the target failed at, unsupported means it was never added, preview_only means it only works in a preview channel. From web-features’ feature-level support: before_feature_support means the target predates the release web-features lists for the feature, no_feature_support means web-features lists no release of this core browser for the feature — which also covers a feature it lists no release for at all, such as a discontinued one (mutation-events) that older releases shipped; call again with one of compat_keys for a key-level verdict on such a target.',
   );
 
 type FailingVerdict = z.infer<typeof FailingVerdictSchema>;
@@ -62,7 +62,7 @@ const FailingTargetSchema = z.object({
     .string()
     .nullable()
     .describe(
-      'browser-compat-data release the token mapped to, or null when it predates them all.',
+      'browser-compat-data release the failure was found at: the release the token maps to, or for a grouped token such as ios_saf 15.0-15.1 the oldest failing release it spans. null when that release predates them all.',
     ),
   verdict: FailingVerdictSchema,
   ...STATEMENT_FIELDS,
@@ -86,16 +86,16 @@ const ResolvedTargetSchema = z.object({
     .string()
     .nullable()
     .describe(
-      'browser-compat-data release the token mapped to, or null when it predates them all.',
+      'browser-compat-data release the token maps to, or null when it predates them all. A grouped token such as ios_saf 15.0-15.1 maps at its lower endpoint and is judged at every release from this one through its upper endpoint’s.',
     ),
   bcd_release_index: z
     .number()
     .int()
-    .describe('Release ordinal used for comparison; -1 when the token predates every release.'),
+    .describe('Ordinal of the bcd_version release; -1 when the token predates every release.'),
   evaluated: z
     .boolean()
     .describe(
-      'True when every compared feature has compatibility data for this target. False when at least one compared feature records nothing for its browser or has no feature-level data for it, or when no feature in the call was comparable — the target then also appears in unchecked_targets. Mapping onto a release is not evaluation.',
+      'True when every compared feature has compatibility data for this target. False when the data of at least one compared feature does not establish support for it either way, or when no feature in the call was comparable — the target then also appears in unchecked_targets. Mapping onto a release is not evaluation.',
     ),
 });
 
@@ -111,7 +111,7 @@ const UncheckedTargetSchema = z.object({
       'no_comparable_feature',
     ])
     .describe(
-      'no_bcd_browser when the agent has no browser-compat-data counterpart, unknown_version when the token maps to no release, no_bcd_data when a compared key records nothing for that browser, no_feature_level_data when a feature judged on web-features’ feature-level support has no answer for the target — a browser outside the Baseline core set, or a release before a ≤ bound — so call again with one of its compat_keys for a key-level answer, no_comparable_feature when every entry in features was a miss or ambiguous so nothing was compared. In the top-level list a target unchecked by several compared features takes the reason of the first of them.',
+      'no_bcd_browser when the agent has no browser-compat-data counterpart, unknown_version when the token maps to no release, no_bcd_data when a compared key’s data does not establish support either way for the target — the key records nothing for that browser, or the target sits before a ≤ bound — no_feature_level_data when a feature judged on web-features’ feature-level support has no answer for the target — a browser outside the Baseline core set, or a release before a ≤ bound — so call again with one of its compat_keys for a key-level answer, no_comparable_feature when every entry in features was a miss or ambiguous so nothing was compared. In the top-level list a target unchecked by several compared features takes the reason of the first of them.',
     ),
   usage_percent: z.number().describe('Percentage points of global traffic this target covers.'),
 });
@@ -208,19 +208,39 @@ interface Comparison {
 }
 
 /**
- * How one support source judged one mapped target, with the fields of the BCD
- * statement behind a key's verdict. The feature-level source reads none.
+ * How one support source judged one browser at one release, with the fields of
+ * the BCD statement behind a key's failing verdict. The feature-level source
+ * reads none.
  */
-interface Judgement {
+type Judgement = { verdict: 'supported' } | { verdict: 'unknown' } | Failure;
+
+/** A failing verdict, with the statement fields a key's verdict carries. */
+interface Failure {
   statement?: SupportStatementFields;
-  verdict: FailingVerdict | 'supported' | 'unknown';
+  verdict: FailingVerdict;
 }
 
-/** Query targets one page covers at most; a larger target_limit is served at this size (D52). */
-const TARGET_LIMIT_CAP = 10;
+/** One support source, asked about one browser at one release ordinal. */
+type Judge = (browser: string, releaseIndex: number) => Judgement;
 
-/** Hard ceiling on target_limit; values past it are rejected against the schema. */
-const TARGET_LIMIT_MAX = 1000;
+/**
+ * Judge a target at every release it spans, oldest first. The oldest failing
+ * release decides, and the failure names that release; with no failure, a
+ * release the source has no answer for leaves the target unknown, so a grouped
+ * token never clears on part of its range.
+ */
+function judgeSpan(
+  target: ResolvedTarget,
+  judge: Judge,
+): { verdict: 'supported' } | { verdict: 'unknown' } | (Failure & { release: SpannedRelease }) {
+  let unknown = false;
+  for (const release of target.span) {
+    const judgement = judge(target.bcd_browser, release.index);
+    if (judgement.verdict === 'unknown') unknown = true;
+    else if (judgement.verdict !== 'supported') return { ...judgement, release };
+  }
+  return { verdict: unknown ? 'unknown' : 'supported' };
+}
 
 /** The browserslist token a target row came from. */
 const tokenOf = (target: { agent: string; version_token: string }) =>
@@ -228,7 +248,7 @@ const tokenOf = (target: { agent: string; version_token: string }) =>
 
 export const browsercompatCompareSupport = tool('browsercompat_compare_support', {
   description:
-    'Compute whether a set of web features clears an explicit browserslist target query. Compares up to 20 features per call; up to 100 may be sent, and entries past the 20th come back unevaluated in omitted_features for the next call. Every call evaluates the whole query: each feature gets a verdict, the count of failing targets, those targets grouped into runs of consecutive query targets per browser in failing_ranges, and its own evaluated and unevaluated target counts with the percentage points of global traffic each covers. The target rows behind those numbers — which release each target maps to, which targets were not evaluated and why, and the failing and unevaluated targets of each feature, a failing row carrying the prefix, alternative name, or flag behind its verdict — cover at most ten query targets per call; page through them with target_offset and target_limit, and the verdicts, coverage, and totals stay identical on every page. A target counts as evaluated only where compatibility data was read for it, so a feature clears only when every target in the query was evaluated and supports it, and is inconclusive otherwise — a query that includes a browser with no compatibility data, as "defaults" does, never clears. A BCD key is judged on its own per-browser support. A web-features id spanning several keys, such as grid, is judged on the release web-features lists for the feature as a whole in each Baseline core browser, as support_source says; its other browsers are not evaluated.',
+    'Compute whether a set of web features clears an explicit browserslist target query. Compares up to 20 features per call; up to 100 may be sent, and entries past the 20th come back unevaluated in omitted_features for the next call. Every call evaluates the whole query: each feature gets a verdict, the count of failing targets, those targets grouped into runs of consecutive query targets per browser in failing_ranges, and its own evaluated and unevaluated target counts with the percentage points of global traffic each covers. The target rows behind those numbers — which release each target maps to, which targets were not evaluated and why, and the failing and unevaluated targets of each feature, a failing row carrying the prefix, alternative name, or flag behind its verdict — cover target_limit query targets per call, 10 by default and up to 1000; page through them with target_offset, and the verdicts, coverage, and totals stay identical on every page. A target counts as evaluated only where compatibility data was read for it, so a feature clears only when every target in the query was evaluated and supports it, and is inconclusive otherwise — a query that includes a browser with no compatibility data, as "defaults" does, never clears. A BCD key is judged on its own per-browser support. A web-features id spanning several keys, such as grid, is judged on the release web-features lists for the feature as a whole in each Baseline core browser, as support_source says; its other browsers are not evaluated.',
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
 
   input: z.object({
@@ -264,10 +284,10 @@ export const browsercompatCompareSupport = tool('browsercompat_compare_support',
       .number()
       .int()
       .min(1)
-      .max(TARGET_LIMIT_MAX)
-      .default(TARGET_LIMIT_CAP)
+      .max(1000)
+      .default(10)
       .describe(
-        'How many query targets this page covers, at most 10 per call; a value from 11 to 1000 is served as 10, and the cap enrichment field reports the size applied. It bounds every list of target rows in the response and never the evaluation: verdicts, coverage, and totals always describe the whole query.',
+        'How many query targets this page covers, 1 to 1000; the page holds that many, fewer only on the last page. It bounds every list of target rows in the response and never the evaluation: verdicts, coverage, and totals always describe the whole query.',
       ),
   }),
 
@@ -335,9 +355,7 @@ export const browsercompatCompareSupport = tool('browsercompat_compare_support',
     data_version: DataVersionSchema.describe('Vintage of each bundled dataset behind this answer.'),
     totalCount: z.number().describe('Number of targets the query resolved to, across every page.'),
     shown: z.number().describe('Number of query targets this page covers.'),
-    cap: z
-      .number()
-      .describe('The page size applied: target_limit, or 10 when target_limit was above 10.'),
+    cap: z.number().describe('The page size requested in target_limit.'),
     truncated: z.boolean().describe('True when more query targets remain past this page.'),
     nextOffset: z
       .number()
@@ -439,8 +457,9 @@ export const browsercompatCompareSupport = tool('browsercompat_compare_support',
       .map((token) => byToken.get(token))
       .filter((target) => target !== undefined);
 
-    const pageSize = Math.min(input.target_limit, TARGET_LIMIT_CAP);
-    const onPage = new Set(tokens.slice(input.target_offset, input.target_offset + pageSize));
+    const onPage = new Set(
+      tokens.slice(input.target_offset, input.target_offset + input.target_limit),
+    );
     const isOnPage = (target: { agent: string; version_token: string }) =>
       onPage.has(tokenOf(target));
 
@@ -465,14 +484,15 @@ export const browsercompatCompareSupport = tool('browsercompat_compare_support',
     };
 
     /**
-     * Judge every query target with one support source. A target the source has
-     * no answer for is unchecked with that source's reason, never a failure.
-     * Failing targets are also grouped into runs as they arrive in query order:
-     * a run continues only across consecutive targets of one agent failing with
-     * one verdict, and any target that passed or went unevaluated ends it.
+     * Judge every query target with one support source, at every release the
+     * target spans. A target the source has no answer for is unchecked with that
+     * source's reason, never a failure. Failing targets are also grouped into
+     * runs as they arrive in query order: a run continues only across
+     * consecutive targets of one agent failing with one verdict, and any target
+     * that passed or went unevaluated ends it.
      */
     const compare = (
-      judge: (target: ResolvedTarget) => Judgement,
+      judge: Judge,
       unknownReason: 'no_bcd_data' | 'no_feature_level_data',
     ): Comparison => {
       const failing: FailingTarget[] = [];
@@ -486,22 +506,23 @@ export const browsercompatCompareSupport = tool('browsercompat_compare_support',
           run = undefined;
           continue;
         }
-        const { verdict, statement } = judge(target);
-        if (verdict === 'unknown') {
+        const judgement = judgeSpan(target, judge);
+        if (judgement.verdict === 'unknown') {
           notEvaluated.push(uncheckedRow(target, unknownReason));
           run = undefined;
           continue;
         }
         evaluatedTokens.push(tokenOf(target));
-        if (verdict === 'supported') {
+        if (judgement.verdict === 'supported') {
           run = undefined;
           continue;
         }
+        const { verdict, statement, release } = judgement;
         failing.push({
           agent: target.agent,
           version_token: target.version_token,
           bcd_browser: target.bcd_browser,
-          bcd_version: target.bcd_version,
+          bcd_version: release.version,
           verdict,
           ...statement,
         });
@@ -574,12 +595,8 @@ export const browsercompatCompareSupport = tool('browsercompat_compare_support',
               source: 'bcd_key' as const,
               cacheKey: `${key}`,
               unknownReason: 'no_bcd_data' as const,
-              judge: (target: ResolvedTarget): Judgement => {
-                const { verdict, detail } = bcd.supportAt(
-                  leaf,
-                  target.bcd_browser,
-                  target.bcd_release_index,
-                );
+              judge: (browser: string, releaseIndex: number): Judgement => {
+                const { verdict, detail } = bcd.supportAt(leaf, browser, releaseIndex);
                 if (verdict === 'supported' || verdict === 'unknown') return { verdict };
                 const { notes: _notes, impl_url: _implUrl, ...statement } = detail;
                 return { verdict, statement };
@@ -590,12 +607,12 @@ export const browsercompatCompareSupport = tool('browsercompat_compare_support',
                 source: 'web_features_feature' as const,
                 cacheKey: `${featureId}`,
                 unknownReason: 'no_feature_level_data' as const,
-                judge: (target: ResolvedTarget): Judgement => ({
+                judge: (browser: string, releaseIndex: number): Judgement => ({
                   verdict: bcd.featureSupportAt(
                     featureLevel,
                     baseline.coreBrowserIds,
-                    target.bcd_browser,
-                    target.bcd_release_index,
+                    browser,
+                    releaseIndex,
                   ),
                 }),
               }
@@ -678,7 +695,7 @@ export const browsercompatCompareSupport = tool('browsercompat_compare_support',
     const shown = onPage.size;
     const nextOffset = input.target_offset + shown;
     const truncated = nextOffset < tokens.length;
-    ctx.enrich({ totalCount: tokens.length, shown, cap: pageSize, truncated });
+    ctx.enrich({ totalCount: tokens.length, shown, cap: input.target_limit, truncated });
     if (truncated) ctx.enrich({ nextOffset });
     if (shown === 0) {
       ctx.enrich({
@@ -709,9 +726,10 @@ export const browsercompatCompareSupport = tool('browsercompat_compare_support',
     return {
       query_echo: input.targets.trim(),
       comparable_features: comparableFeatures,
-      targets_resolved: resolved
-        .filter(isOnPage)
-        .map((target) => ({ ...target, evaluated: !uncheckedTokens.has(tokenOf(target)) })),
+      targets_resolved: resolved.filter(isOnPage).map(({ span: _span, ...target }) => ({
+        ...target,
+        evaluated: !uncheckedTokens.has(tokenOf(target)),
+      })),
       targets_resolved_total: resolved.length,
       evaluated_targets_total: evaluatedTokens.length,
       unchecked_targets: uncheckedTargets.filter(isOnPage),

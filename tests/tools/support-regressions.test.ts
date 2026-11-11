@@ -19,9 +19,9 @@ function text(response: Awaited<ReturnType<typeof runToolContract>>): string {
 describe('same-dataset characterization', () => {
   it('preserves raw global usage values and ordinary explicit resolution', async () => {
     const targets = await getTargetsService();
-    expect(targets.agentUsageTotal('chrome')).toBe(23.7987);
-    expect(targets.coverage(['ie 11'])).toBe(0.2118);
-    expect(targets.excludedUsage(['css-has'])).toBe(1.5832);
+    expect(targets.agentUsageTotal('chrome')).toBe(24.9624);
+    expect(targets.coverage(['ie 11'])).toBe(0.165);
+    expect(targets.excludedUsage(['css-has'])?.excludedPercent).toBe(1.4843);
     expect(targets.queryTokens('chrome 120')).toEqual(['chrome 120']);
     expect(targets.queryTokens('current node')).toEqual([`node ${process.versions.node}`]);
   });
@@ -180,8 +180,8 @@ describe('#34 global population', () => {
       topic: 'browserslist_agents',
     });
     const output = browsercompatListReference.output.parse(response.structuredContent);
-    expect(output.entries.find((entry) => entry.id === 'chrome')?.usage_percent).toBe(23.7987);
-    expect(text(response)).toContain('usage_percent: 23.7987% of global traffic');
+    expect(output.entries.find((entry) => entry.id === 'chrome')?.usage_percent).toBe(24.9624);
+    expect(text(response)).toContain('usage_percent: 24.9624% of global traffic');
     expect(response.structuredContent).toMatchObject({ attribution: CANIUSE_ATTRIBUTION });
     expect(text(response).replaceAll('\\~', '~')).toContain(CANIUSE_ATTRIBUTION);
   });

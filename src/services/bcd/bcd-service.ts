@@ -301,6 +301,13 @@ export class BcdService {
     return this.releasesByBrowser.get(id)?.length ?? 0;
   }
 
+  /** Releases with an ordinal above `afterIndex` through `throughIndex`, oldest first. */
+  releasesBetween(id: string, afterIndex: number, throughIndex: number): ReleaseEntry[] {
+    return (this.releasesByBrowser.get(id) ?? []).filter(
+      (release) => release.index > afterIndex && release.index <= throughIndex,
+    );
+  }
+
   /** The newest release that has actually shipped (not beta, nightly, or planned). */
   latestShippedRelease(id: string): ReleaseEntry | undefined {
     const releases = this.releasesByBrowser.get(id);
@@ -331,9 +338,11 @@ export class BcdService {
 
   /**
    * Map a version token onto a browser's release ordering. Handles the literal
-   * `all`, `a-b` ranges (lower bound wins), trailing-zero drift between caniuse
-   * and BCD in both directions, and nearest-at-or-below for tokens BCD never
-   * published. Returns index `-1` when the token predates every release.
+   * `all`, `a-b` ranges (mapped at the lower endpoint `a`; the targets service
+   * maps `b` with a second call and judges every release between),
+   * trailing-zero drift between caniuse and BCD in both directions, and
+   * nearest-at-or-below for tokens BCD never published. Returns index `-1` when
+   * the token predates every release.
    */
   resolveTargetVersion(browserId: string, token: string): VersionResolution {
     const releases = this.releasesByBrowser.get(browserId);

@@ -7,10 +7,13 @@ import { JsonRpcErrorCode } from '@cyanheads/mcp-ts-core/errors';
 import { runToolContract } from '@cyanheads/mcp-ts-core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { browsercompatCheckBaseline } from '@/mcp-server/tools/definitions/browsercompat-check-baseline.tool.js';
+import { browsercompatCompareSupport } from '@/mcp-server/tools/definitions/browsercompat-compare-support.tool.js';
 import { browsercompatGetFeature } from '@/mcp-server/tools/definitions/browsercompat-get-feature.tool.js';
 import * as baselineModule from '@/services/baseline/baseline-service.js';
 import type { WebFeature } from '@/services/baseline/types.js';
 import * as bcdModule from '@/services/bcd/bcd-service.js';
+import * as targetsModule from '@/services/targets/targets-service.js';
+import { syntheticUsage } from '../helpers/synthetic-targets.js';
 
 const advisory = {
   reason: 'Use <dialog> instead of **legacy**.',
@@ -94,6 +97,20 @@ beforeEach(() => {
       zero: makeFeature([]),
       statusless: makeFeature(['api.Statusless']),
       missing: makeFeature([], ['not-a-real-caniuse-id']),
+      vendorNamed: makeFeature(
+        [
+          'css.properties.-webkit-fixture-a',
+          'css.properties.-moz-fixture-b',
+          'css.properties.-ms-fixture-c',
+          'css.selectors.-o-fixture-d',
+        ],
+        ['fixture-prefix'],
+      ),
+      mixedNamed: makeFeature(
+        ['css.properties.-webkit-fixture-e', 'css.properties.fixture-ms-f'],
+        ['fixture-prefix'],
+      ),
+      zeroNamed: makeFeature([], ['fixture-prefix']),
     },
     {},
     {},
@@ -144,10 +161,12 @@ describe('#13 usage scope boundaries', () => {
     const rows = browsercompatCheckBaseline.output.parse(result.structuredContent).results;
     for (const row of rows.slice(0, 2)) {
       expect(row).not.toHaveProperty('usage_percent_excluded');
+      expect(row).not.toHaveProperty('usage_percent_prefixed');
       expect(row).not.toHaveProperty('usage_source');
     }
     for (const row of rows.slice(2)) {
       expect(row.usage_percent_excluded).toBeTypeOf('number');
+      expect(row.usage_percent_prefixed).toBeTypeOf('number');
       expect(row.usage_source).toContain('Feature-level');
     }
     expect(result.structuredContent).toHaveProperty('attribution');
@@ -156,9 +175,35 @@ describe('#13 usage scope boundaries', () => {
     });
     expect(noUsage.structuredContent).not.toHaveProperty('attribution');
     expect(JSON.stringify(noUsage.content)).not.toContain('usage_percent_excluded');
+    expect(JSON.stringify(noUsage.content)).not.toContain('usage_percent_prefixed');
     expect(
       browsercompatCheckBaseline.output.parse(result.structuredContent).all_widely_available,
     ).toBe(false);
+  });
+});
+
+describe('#39 prefix-required usage boundaries', () => {
+  beforeEach(() => {
+    /** caniuse id `fixture-prefix` on one agent: 1 point prefix-required, 2 unsupported, 4 supported. */
+    const targets = syntheticUsage(
+      { '1': 1, '2': 2, '3': 4 },
+      { 'fixture-prefix': { '1': 'y x #1', '2': 'n', '3': 'y' } },
+    );
+    vi.spyOn(targetsModule, 'getTargetsService').mockResolvedValue(targets);
+  });
+
+  it('counts prefix-required support as excluded unless every compat key is a vendor-prefixed name', async () => {
+    const result = await runToolContract(browsercompatCheckBaseline, {
+      features: ['vendorNamed', 'mixedNamed', 'zeroNamed'],
+    });
+    expect(result.isError).not.toBe(true);
+    const rows = browsercompatCheckBaseline.output.parse(result.structuredContent).results;
+    expect(rows.map((row) => row.usage_percent_excluded)).toEqual([2, 3, 3]);
+    expect(rows.map((row) => row.usage_percent_prefixed)).toEqual([0, 1, 1]);
+    const text = result.content.flatMap((block) => (block.type === 'text' ? [block.text] : []));
+    expect(text.join('\n')).toContain(
+      '**usage_percent_excluded:** 3%\n**usage_percent_prefixed:** 1%',
+    );
   });
 });
 
@@ -290,5 +335,177 @@ describe('#9/#11 ingestion and unavailable metadata', () => {
         '    - notes wrong verdict',
       ].join('\n'),
     );
+  });
+});
+
+describe('#38 grouped-token boundaries — every release a token spans is judged', () => {
+  /** A leaf whose only support entry is one browser's statement or statements. */
+  const leaf = (browser: string, support: unknown) => ({
+    __compat: { support: { [browser]: support } },
+  });
+  /** A two-key web-features id judged on its feature-level release in safari_ios alone. */
+  const featureLevel = (listed: string): WebFeature => ({
+    ...makeFeature(['api.Removal', 'api.Throughout']),
+    status: { baseline: false, support: { safari_ios: listed } },
+  });
+
+  beforeEach(async () => {
+    /** BCD's own safari_ios and samsunginternet_android releases, so both endpoints resolve as in production. */
+    const { default: bundled } = await import('@mdn/browser-compat-data', {
+      with: { type: 'json' },
+    });
+    const rangeBcd = new bcdModule.BcdService({
+      __meta: { version: 'fixture', timestamp: '2020-01-01' },
+      browsers: {
+        safari_ios: bundled.browsers.safari_ios,
+        samsunginternet_android: bundled.browsers.samsunginternet_android,
+      },
+      api: {
+        Removal: leaf('safari_ios', { version_added: '11', version_removed: '15.1' }),
+        Reintroduced: leaf('samsunginternet_android', [
+          { version_added: '5.4' },
+          { version_added: '4.0', version_removed: '5.2' },
+        ]),
+        Addition: leaf('safari_ios', { version_added: '15.1' }),
+        BoundedRemoval: leaf('safari_ios', { version_added: '11', version_removed: '≤15.1' }),
+        BoundedReaddition: leaf('safari_ios', [
+          { version_added: '≤15.2' },
+          { version_added: '11', version_removed: '15.1' },
+        ]),
+        Throughout: leaf('safari_ios', { version_added: '11' }),
+      },
+    });
+    const rangeBaseline = new baselineModule.BaselineService(
+      { listedAt: featureLevel('15.1'), boundedAt: featureLevel('≤15.1') },
+      {},
+      {},
+      { safari_ios: {} },
+    );
+    vi.spyOn(bcdModule, 'getBcdService').mockResolvedValue(rangeBcd);
+    vi.spyOn(baselineModule, 'getBaselineService').mockResolvedValue(rangeBaseline);
+  });
+
+  const SPANS_15 = { agent: 'ios_saf', version_token: '15.0-15.1', bcd_browser: 'safari_ios' };
+  it.each([
+    {
+      label: 'an exact removal inside the range fails as removed at the removal',
+      feature: 'api.Removal',
+      targets: 'ios_saf 15.1',
+      verdict: 'fails',
+      failing: [
+        {
+          ...SPANS_15,
+          bcd_version: '15.1',
+          verdict: 'removed',
+          version_added: '11',
+          version_removed: '15.1',
+        },
+      ],
+      line: '  - fails on ios_saf 15.0-15.1 → safari_ios 15.1 (removed) · version_added 11 · version_removed 15.1',
+    },
+    {
+      label: 'a removal and reintroduction inside samsung 5.0-5.4 (BCD 5.0, 5.2, 5.4) fails at 5.2',
+      feature: 'api.Reintroduced',
+      targets: 'samsung 5.4',
+      verdict: 'fails',
+      failing: [
+        {
+          agent: 'samsung',
+          version_token: '5.0-5.4',
+          bcd_browser: 'samsunginternet_android',
+          bcd_version: '5.2',
+          verdict: 'unsupported',
+        },
+      ],
+      line: '  - fails on samsung 5.0-5.4 → samsunginternet_android 5.2 (unsupported)',
+    },
+    {
+      label: 'an addition partway fails at the lower endpoint, as before',
+      feature: 'api.Addition',
+      targets: 'ios_saf 15.1',
+      verdict: 'fails',
+      failing: [{ ...SPANS_15, bcd_version: '15', verdict: 'unsupported' }],
+      line: '  - fails on ios_saf 15.0-15.1 → safari_ios 15 (unsupported)',
+    },
+    {
+      label: 'a ≤15.1 removal, unknown at 15, fails as removed at 15.1',
+      feature: 'api.BoundedRemoval',
+      targets: 'ios_saf 15.1',
+      verdict: 'fails',
+      failing: [
+        {
+          ...SPANS_15,
+          bcd_version: '15.1',
+          verdict: 'removed',
+          version_added: '11',
+          version_removed: '≤15.1',
+        },
+      ],
+      line: '  - fails on ios_saf 15.0-15.1 → safari_ios 15.1 (removed) · version_added 11 · version_removed ≤15.1',
+    },
+    {
+      label: 'support throughout clears',
+      feature: 'api.Throughout',
+      targets: 'ios_saf 15.1',
+      verdict: 'clears',
+      failing: [],
+    },
+    {
+      label: 'feature-level: a release listed inside the range fails at the lower endpoint',
+      feature: 'listedAt',
+      targets: 'ios_saf 15.1',
+      verdict: 'fails',
+      failing: [{ ...SPANS_15, bcd_version: '15', verdict: 'before_feature_support' }],
+      line: '  - fails on ios_saf 15.0-15.1 → safari_ios 15 (before_feature_support)',
+    },
+  ])('$label', async ({ feature, targets, verdict, failing, line }) => {
+    const result = await runToolContract(browsercompatCompareSupport, {
+      features: [feature],
+      targets,
+    });
+    expect(result.isError).not.toBe(true);
+    const output = browsercompatCompareSupport.output.parse(result.structuredContent);
+    expect(output.results[0]).toMatchObject({ verdict, failing_total: failing.length });
+    expect(output.results[0]?.failing_targets).toEqual(failing);
+    expect(output.results[0]?.unchecked_targets).toEqual([]);
+    expect(output.all_clear).toBe(verdict === 'clears');
+    const lines = (result.content[0]?.type === 'text' ? result.content[0].text : '').split('\n');
+    expect(lines.filter((text) => text.startsWith('  - fails on '))).toEqual(line ? [line] : []);
+  });
+
+  it.each([
+    {
+      label: 'support at 15, a removal at 15.1, and a ≤15.2 re-addition leave the target unchecked',
+      feature: 'api.BoundedReaddition',
+      reason: 'no_bcd_data',
+    },
+    {
+      label: 'feature-level: a ≤15.1 release leaves the target unchecked',
+      feature: 'boundedAt',
+      reason: 'no_feature_level_data',
+    },
+  ])('$label — inconclusive, never clears', async ({ feature, reason }) => {
+    const result = await runToolContract(browsercompatCompareSupport, {
+      features: [feature],
+      targets: 'ios_saf 15.1',
+    });
+    expect(result.isError).not.toBe(true);
+    const output = browsercompatCompareSupport.output.parse(result.structuredContent);
+    const unchecked = { agent: 'ios_saf', version_token: '15.0-15.1', reason };
+    expect(output.results[0]).toMatchObject({
+      verdict: 'inconclusive',
+      failing_total: 0,
+      evaluated_total: 0,
+      unchecked_total: 1,
+      unchecked_targets: [expect.objectContaining(unchecked)],
+    });
+    expect(output.unchecked_targets).toEqual([expect.objectContaining(unchecked)]);
+    expect(output.targets_resolved).toEqual([
+      { ...SPANS_15, bcd_version: '15', bcd_release_index: 22, evaluated: false },
+    ]);
+    expect(output.all_clear).toBe(false);
+    const text = result.content[0]?.type === 'text' ? result.content[0].text : '';
+    expect(text).toContain(`  - not evaluated on ios_saf 15.0-15.1 (${reason}, `);
+    expect(text).toContain('| ios_saf 15.0-15.1 | safari_ios 15 (index 22) | no |');
   });
 });

@@ -74,7 +74,7 @@ it('keeps compat_keys pages, totals, and continuations coherent across generated
     if (!resolution.found) throw new Error(`${feature} must resolve`);
     owned.set(feature, [...(resolution.compat_keys ?? [])]);
   }
-  expect([...owned.values()].map((keys) => keys.length)).toEqual([618, 61, 10, 0]);
+  expect([...owned.values()].map((keys) => keys.length)).toEqual([629, 69, 10, 0]);
 
   await fc.assert(
     fc.asyncProperty(
@@ -149,7 +149,7 @@ it('keeps target pages, continuations, and whole-query answers coherent across g
       fc.oneof(fc.integer({ min: 1, max: 10 }), fc.integer({ min: 11, max: 1000 })),
       async (target_offset, target_limit) => {
         const { structured, output, wholeQuery } = await call({ target_offset, target_limit });
-        const cap = Math.min(target_limit, 10);
+        const cap = target_limit;
         const shown = Math.min(cap, Math.max(0, total - target_offset));
         const remaining = target_offset + shown < total;
 

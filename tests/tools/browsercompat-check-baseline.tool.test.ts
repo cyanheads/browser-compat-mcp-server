@@ -40,7 +40,7 @@ describe('browsercompat_check_baseline — worked example', () => {
     expect(result.all_widely_available).toBe(false);
   });
 
-  it('has: widely, limiting_browser firefox 121, deprecated/experimental false, usage excluded 1.5832%', async () => {
+  it('has: widely, limiting_browser firefox 121, deprecated/experimental false, usage excluded 1.4843%', async () => {
     const { result } = await run(['has']);
     const has = result.results[0];
     expect(has).toMatchObject({
@@ -51,10 +51,11 @@ describe('browsercompat_check_baseline — worked example', () => {
       limiting_browser: { browser_id: 'firefox', name: 'Firefox', version: '121' },
       deprecated: false,
       experimental: false,
+      usage_percent_prefixed: 0,
       usage_source:
         'Feature-level caniuse figure; reported for a BCD key only when it is the feature’s sole declared compat key. Percentage points of global traffic; untracked traffic is unknown.',
     });
-    expect(has?.usage_percent_excluded).toBeCloseTo(1.5832, 3);
+    expect(has?.usage_percent_excluded).toBeCloseTo(1.4843, 3);
   });
 
   it('usage_source states the global population and unknown untracked traffic', async () => {
@@ -151,7 +152,7 @@ describe('browsercompat_check_baseline — all_widely_available (D30)', () => {
 describe('browsercompat_check_baseline — enrichment', () => {
   it('always echoes data_version and totalCount', async () => {
     const { ctx, result } = await run(['has', 'intersection-observer-v2']);
-    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.7' });
+    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.8' });
     expect(getEnrichment(ctx).totalCount).toBe(2);
     expect(result.results).toHaveLength(2);
   });
@@ -191,7 +192,7 @@ describe('browsercompat_check_baseline — limiting_browser for multi-key ids (#
       version: '16',
     });
     expect(grid?.compat_keys).toHaveLength(10);
-    expect(grid?.compat_keys_total).toBe(61);
+    expect(grid?.compat_keys_total).toBe(69);
     // Checked on the raw structuredContent: the output parse would strip an undeclared field.
     expect(result.structuredContent).not.toHaveProperty('results.0.feature_support');
     const text = textOf(result);
@@ -338,6 +339,7 @@ describe('browsercompat_check_baseline — format()', () => {
     expect(text).toContain('**all_widely_available:** false');
     expect(text).toContain('## :has()');
     expect(text).toContain('**usage_percent_excluded:**');
+    expect(text).toContain('**usage_percent_prefixed:**');
     expect(text).toContain('## Intersection observer visibility tracking');
     expect(text).toContain('none — this entry owns no browser-compat-data keys');
     expect(text).toContain('## nope-xyz');
@@ -361,7 +363,7 @@ const serializedBytes = (result: Awaited<ReturnType<typeof runToolContract>>) =>
   );
 
 describe('browsercompat_check_baseline — compat_keys per result (#25)', () => {
-  it('grid carries its first 10 keys with total 61 and a pointer naming the resolved id; promise carries all 10', async () => {
+  it('grid carries its first 10 keys with total 69 and a pointer naming the resolved id; promise carries all 10', async () => {
     const baseline = await getBaselineService();
     // "Grid" resolves to the id "grid"; the pointer must name the id, not the input.
     const { output, text } = await contract(['Grid', 'promise']);
@@ -370,13 +372,13 @@ describe('browsercompat_check_baseline — compat_keys per result (#25)', () => 
     const promiseKeys = baseline.compatKeys('promise');
     expect(grid?.resolved_as?.baseline_id).toBe('grid');
     expect(grid?.compat_keys).toEqual(gridKeys);
-    expect(grid?.compat_keys_total).toBe(61);
+    expect(grid?.compat_keys_total).toBe(69);
     expect(promiseKeys).toHaveLength(10);
     expect(promise?.compat_keys).toEqual(promiseKeys);
     expect(promise?.compat_keys_total).toBe(10);
     const lines = text.split('\n');
     expect(lines).toContain(
-      `**compat_keys:** 10 of 61: ${gridKeys.join(', ')} — call browsercompat_get_feature with grid for all 61`,
+      `**compat_keys:** 10 of 69: ${gridKeys.join(', ')} — call browsercompat_get_feature with grid for all 69`,
     );
     expect(lines).toContain(`**compat_keys:** 10 of 10: ${promiseKeys.join(', ')}`);
   });
@@ -386,7 +388,7 @@ describe('browsercompat_check_baseline — compat_keys per result (#25)', () => 
     expect(output.results).toHaveLength(20);
     for (const item of output.results) {
       expect(item.compat_keys).toHaveLength(10);
-      expect(item.compat_keys_total).toBe(618);
+      expect(item.compat_keys_total).toBe(629);
     }
     expect(serializedBytes(result)).toBeLessThanOrEqual(40_000);
   });
@@ -398,6 +400,50 @@ describe('browsercompat_check_baseline — compat_keys per result (#25)', () => 
       expect(result.structuredContent).not.toHaveProperty(`results.${index}.compat_keys`);
       expect(result.structuredContent).not.toHaveProperty(`results.${index}.compat_keys_total`);
     }
+  });
+});
+
+describe('browsercompat_check_baseline — usage counts only default, unprefixed, enabled support (#39)', () => {
+  // Figures measured on caniuse-lite 1.0.30001823 and web-features 3.45.0.
+  const features = [
+    'user-select',
+    'backdrop-filter',
+    'css.properties.backdrop-filter',
+    'text-stroke-fill',
+    'has',
+  ];
+
+  it('excludes prefix-required support, except where every compat key is a prefixed name', async () => {
+    const { output, text } = await contract(features);
+    const excluded = [16.3334, 1.9517, 1.9517, 0.1689, 1.4843];
+    expect(output.results.map((item) => item.usage_percent_excluded)).toEqual(excluded);
+    const lines = text.split('\n');
+    for (const value of excluded) expect(lines).toContain(`**usage_percent_excluded:** ${value}%`);
+  });
+
+  it('usage_percent_prefixed carries the share the -webkit- form recovers, rendered after the excluded figure', async () => {
+    const { output, text } = await contract(features);
+    const prefixed = [16.3334, 1.6329, 1.6329, 0, 0];
+    expect(output.results.map((item) => item.usage_percent_prefixed)).toEqual(prefixed);
+    for (const [excluded, share] of [
+      [16.3334, 16.3334],
+      [1.9517, 1.6329],
+      [0.1689, 0],
+      [1.4843, 0],
+    ]) {
+      expect(text).toContain(
+        `**usage_percent_excluded:** ${excluded}%\n**usage_percent_prefixed:** ${share}%`,
+      );
+    }
+  });
+
+  it('css.properties.user-select is not its feature’s sole key, so it carries no usage field', async () => {
+    const { result, output, text } = await contract(['css.properties.user-select']);
+    for (const field of ['usage_percent_excluded', 'usage_percent_prefixed', 'usage_source']) {
+      expect(output.results[0]).not.toHaveProperty(field);
+    }
+    expect(result.structuredContent).not.toHaveProperty('attribution');
+    expect(text).not.toContain('usage_');
   });
 });
 

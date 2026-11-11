@@ -33,7 +33,7 @@ const REGISTERED_TOOLS = [
 ];
 
 describe('tools/list surface', () => {
-  it('advertises the per-call caps below their hard ceilings (#29) and compat_keys paging (#25)', () => {
+  it('advertises the feature batch ceiling (#29), the 1000 page-size cap with a default page of 10 (#40), and compat_keys paging (#25)', () => {
     const properties = (schema: z.ZodType) =>
       (z.toJSONSchema(schema) as { properties: Record<string, Record<string, unknown>> })
         .properties;
@@ -43,6 +43,7 @@ describe('tools/list surface', () => {
     expect(properties(browsercompatSearchFeatures.input).limit).toMatchObject({
       minimum: 1,
       maximum: 1000,
+      default: 10,
     });
     expect(properties(browsercompatCompareSupport.input).target_limit).toMatchObject({
       type: 'integer',

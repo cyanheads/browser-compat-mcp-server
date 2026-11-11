@@ -35,6 +35,23 @@ import {
 const USAGE_SOURCE =
   'Feature-level caniuse figure; reported for a BCD key only when it is the feature’s sole declared compat key. Percentage points of global traffic; untracked traffic is unknown.';
 
+/** A BCD key segment spelled with a vendor prefix, such as `-webkit-text-stroke`. */
+const VENDOR_PREFIXED_SEGMENT = /^-(?:webkit|moz|ms|o)-/;
+
+/**
+ * True when the feature owns at least one compat key and every one names a
+ * vendor-prefixed identifier: the feature is spelled with the prefix, so
+ * caniuse's prefix-required support is support for it as written.
+ */
+function spelledWithPrefix(compatKeys: string[]): boolean {
+  return (
+    compatKeys.length > 0 &&
+    compatKeys.every((key) =>
+      key.split('.').some((segment) => VENDOR_PREFIXED_SEGMENT.test(segment)),
+    )
+  );
+}
+
 const ResultSchema = z.object({
   input: z.string().describe('The feature string as the caller sent it.'),
   found: z.boolean().describe('True when the feature string resolved to a tracked entry.'),
@@ -70,12 +87,20 @@ const ResultSchema = z.object({
     .number()
     .optional()
     .describe(
-      'Feature-level percentage points of global traffic excluded. A resolved BCD key receives it only when it is the feature’s sole declared compat key. Absent without caniuse data — never zero in that case.',
+      'Feature-level percentage points of global traffic excluded: browser versions where caniuse records no support that works by default, so partial, prefix-required, flag-gated, and unknown support all count as excluded. For a feature whose compat keys all name a vendor-prefixed identifier, such as -webkit-text-stroke, prefix-required support counts as supported. A resolved BCD key receives the figure only when it is the feature’s sole declared compat key. Absent without caniuse data — never zero in that case.',
+    ),
+  usage_percent_prefixed: z
+    .number()
+    .optional()
+    .describe(
+      'Of usage_percent_excluded, the percentage points of global traffic where the feature works only with a vendor prefix; writing the prefixed form recovers this share. Present whenever usage_percent_excluded is, and never larger.',
     ),
   usage_source: z
     .string()
     .optional()
-    .describe('What usage_percent_excluded is a share of. Present whenever that figure is.'),
+    .describe(
+      'What usage_percent_excluded and usage_percent_prefixed are shares of. Present whenever those figures are.',
+    ),
   compat_keys: z
     .array(z.string())
     .optional()
@@ -228,11 +253,13 @@ export const browsercompatCheckBaseline = tool('browsercompat_check_baseline', {
       const discouraged = featureId === null ? undefined : baseline.discouraged(featureId);
       const featureKeys = featureId === null ? [] : baseline.compatKeys(featureId);
       const usageMatches = key === null || (featureKeys.length === 1 && featureKeys[0] === key);
-      const excluded =
+      const usage =
         featureId === null || !usageMatches
           ? undefined
-          : targets.excludedUsage(baseline.caniuseIds(featureId));
-      if (excluded !== undefined) anyUsage = true;
+          : targets.excludedUsage(baseline.caniuseIds(featureId), {
+              spelledWithPrefix: spelledWithPrefix(featureKeys),
+            });
+      if (usage !== undefined) anyUsage = true;
 
       results.push({
         input: entry,
@@ -246,9 +273,13 @@ export const browsercompatCheckBaseline = tool('browsercompat_check_baseline', {
           ? {}
           : { deprecated: leaf.status.deprecated, experimental: leaf.status.experimental }),
         ...(discouraged === undefined ? {} : { discouraged }),
-        ...(excluded === undefined
+        ...(usage === undefined
           ? {}
-          : { usage_percent_excluded: excluded, usage_source: USAGE_SOURCE }),
+          : {
+              usage_percent_excluded: usage.excludedPercent,
+              usage_percent_prefixed: usage.prefixedPercent,
+              usage_source: USAGE_SOURCE,
+            }),
         ...(compatKeys === undefined ? {} : batchCompatKeys(compatKeys)),
       });
     }
@@ -310,6 +341,9 @@ export const browsercompatCheckBaseline = tool('browsercompat_check_baseline', {
       }
       if (item.usage_percent_excluded !== undefined) {
         lines.push(`**usage_percent_excluded:** ${item.usage_percent_excluded}%`);
+      }
+      if (item.usage_percent_prefixed !== undefined) {
+        lines.push(`**usage_percent_prefixed:** ${item.usage_percent_prefixed}%`);
       }
       if (item.usage_source !== undefined)
         lines.push(`**usage_source:** ${markdownText(item.usage_source)}`);

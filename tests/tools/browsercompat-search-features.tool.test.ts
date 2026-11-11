@@ -142,7 +142,7 @@ describe('browsercompat_search_features — enrichment', () => {
       limit: 2,
     });
     expect(response.structuredContent).toMatchObject({
-      totalCount: 356,
+      totalCount: 358,
       truncated: true,
       shown: 2,
       cap: 2,
@@ -151,15 +151,15 @@ describe('browsercompat_search_features — enrichment', () => {
     const text = response.content.map((block) => (block as { text: string }).text).join('\n');
     expect(text).toContain('# 2 matches');
     expect(text).toContain('**Filters:** namespace css');
-    expect(text).toContain('**356 total**');
+    expect(text).toContain('**358 total**');
     expect(text).toContain('**truncated:** true');
     expect(text).toContain('**shown:** 2');
     expect(text).toContain('**cap:** 2');
   });
 
-  it('always echoes data_version and totalCount (matches before the cap)', async () => {
+  it('always echoes data_version and totalCount (matches across every page)', async () => {
     const { ctx } = await run({ query: 'has', limit: 1 });
-    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.7' });
+    expect(getEnrichment(ctx).data_version).toMatchObject({ bcd: '8.1.8' });
     expect(typeof getEnrichment(ctx).totalCount).toBe('number');
   });
 });
@@ -198,32 +198,104 @@ describe('browsercompat_search_features — errors (invalid_query)', () => {
   });
 });
 
-describe('browsercompat_search_features — limit past the per-call cap (#29)', () => {
-  it('limit 51 and 1000 return 50 rows with cap 50 and a continuation, on both surfaces', async () => {
-    const fifty = await runToolContract(browsercompatSearchFeatures, {
-      query: 'display',
-      namespace: 'css',
-      limit: 50,
+describe('browsercompat_search_features — limit is the page size, up to 1000 (#40)', () => {
+  /**
+   * One assembled page, with the ranked keys it should hold read from the search
+   * index itself. Match counts are for BCD 8.1.8, web-features 3.45.0, and
+   * caniuse-lite 1.0.30001823: "has" 445, "a" 20,768.
+   */
+  async function page(query: string, paging: { limit?: number; offset?: number }) {
+    const response = await runToolContract(browsercompatSearchFeatures, { query, ...paging });
+    expect(response.isError).not.toBe(true);
+    const ranked = (await getSearchService()).rank(query, {});
+    const offset = paging.offset ?? 0;
+    const output = browsercompatSearchFeatures.output.parse(response.structuredContent);
+    const text = contentText(response);
+    return {
+      total: ranked.length,
+      structured: response.structuredContent as Record<string, unknown>,
+      keys: output.results.map((row) => row.bcd_key ?? row.baseline_id),
+      expected: ranked
+        .slice(offset, offset + (paging.limit ?? 10))
+        .map((hit) => hit.row.bcd_key ?? hit.row.baseline_id),
+      headings: text.split('\n').filter((line) => line.startsWith('## ')).length,
+      text,
+    };
+  }
+
+  it('limit 51 on "has" returns 51 rows with shown, cap, and nextOffset 51, on both surfaces', async () => {
+    const result = await page('has', { limit: 51 });
+    expect(result.total).toBe(445);
+    expect(result.keys).toHaveLength(51);
+    expect(result.keys).toEqual(result.expected);
+    expect(result.structured).toMatchObject({
+      totalCount: 445,
+      truncated: true,
+      shown: 51,
+      cap: 51,
+      nextOffset: 51,
     });
-    for (const limit of [51, 1000]) {
-      const response = await runToolContract(browsercompatSearchFeatures, {
-        query: 'display',
-        namespace: 'css',
-        limit,
-      });
-      expect(response.isError).not.toBe(true);
-      const output = browsercompatSearchFeatures.output.parse(response.structuredContent);
-      expect(output.results).toHaveLength(50);
-      expect(response.structuredContent).toMatchObject({
-        totalCount: 356,
-        truncated: true,
-        shown: 50,
-        cap: 50,
-        nextOffset: 50,
-      });
-      expect(response.structuredContent).toEqual(fifty.structuredContent);
-      expect(contentText(response)).toBe(contentText(fifty));
+    expect(result.headings).toBe(51);
+    expect(result.text).toContain('# 51 matches');
+    expect(result.text).toContain('**cap:** 51');
+    expect(result.text).toContain('**nextOffset:** 51');
+  });
+
+  it('limit 1000 on "has" returns all 445 matches with no continuation, on both surfaces', async () => {
+    const result = await page('has', { limit: 1000 });
+    expect(result.keys).toHaveLength(445);
+    expect(result.keys).toEqual(result.expected);
+    expect(result.structured).toMatchObject({ totalCount: 445 });
+    for (const field of ['truncated', 'shown', 'cap', 'nextOffset', 'offsetNotice']) {
+      expect(result.structured).not.toHaveProperty(field);
     }
+    expect(result.headings).toBe(445);
+    expect(result.text).toContain('# 445 matches');
+  });
+
+  it('limit 1000 on "a" returns 1000 rows with nextOffset 1000, on both surfaces', async () => {
+    const result = await page('a', { limit: 1000 });
+    expect(result.total).toBe(20_768);
+    expect(result.keys).toHaveLength(1000);
+    expect(result.keys).toEqual(result.expected);
+    expect(result.structured).toMatchObject({
+      totalCount: 20_768,
+      truncated: true,
+      shown: 1000,
+      cap: 1000,
+      nextOffset: 1000,
+    });
+    expect(result.headings).toBe(1000);
+    expect(result.text).toContain('**nextOffset:** 1000');
+  });
+
+  it('a last short page at limit 1000 returns the remainder with no continuation', async () => {
+    const result = await page('has', { limit: 1000, offset: 400 });
+    expect(result.keys).toHaveLength(45);
+    expect(result.keys).toEqual(result.expected);
+    expect(result.structured).not.toHaveProperty('nextOffset');
+    expect(result.structured).not.toHaveProperty('truncated');
+    expect(result.headings).toBe(45);
+  });
+
+  it('an offset at the end at limit 1000 returns no rows and the offset notice, on both surfaces', async () => {
+    const result = await page('has', { limit: 1000, offset: 445 });
+    expect(result.keys).toEqual([]);
+    expect(result.structured).toMatchObject({
+      totalCount: 445,
+      offsetNotice:
+        'offset 445 is at or past totalCount 445. Re-run with an offset below 445, or omit offset for the first page.',
+    });
+    expect(result.structured).not.toHaveProperty('nextOffset');
+    expect(result.text).toContain('# 0 matches');
+    expect(result.text).toContain('**Past the end:** offset 445 is at or past totalCount 445.');
+  });
+
+  it('an omitted limit returns a page of 10', async () => {
+    const result = await page('has', {});
+    expect(result.keys).toHaveLength(10);
+    expect(result.keys).toEqual(result.expected);
+    expect(result.structured).toMatchObject({ shown: 10, cap: 10, nextOffset: 10 });
   });
 
   it('rejects limit 0 and 1001 at the schema boundary, and accepts 1000', () => {
@@ -262,17 +334,17 @@ function contentText(response: Awaited<ReturnType<typeof runToolContract>>): str
 }
 
 describe('browsercompat_search_features — offset paging', () => {
-  it('pages "display" in css across every page to the end: 356 distinct rows equal to the full ranking', async () => {
+  it('pages "display" in css across every page to the end: 358 distinct rows equal to the full ranking', async () => {
     const full = (await getSearchService()).rank('display', { namespace: 'css' });
-    expect(full).toHaveLength(356);
+    expect(full).toHaveLength(358);
 
     const seen: string[] = [];
     const nextOffsets: (number | undefined)[] = [];
-    for (let offset = 0; offset < 356; offset += 50) {
+    for (let offset = 0; offset < 358; offset += 50) {
       const { ctx, result } = await run({ query: 'display', namespace: 'css', limit: 50, offset });
       const enrichment = getEnrichment(ctx);
-      const remaining = 356 - offset - result.results.length;
-      expect(enrichment.totalCount).toBe(356);
+      const remaining = 358 - offset - result.results.length;
+      expect(enrichment.totalCount).toBe(358);
       expect(enrichment.shown).toBe(remaining > 0 ? result.results.length : undefined);
       expect(enrichment.truncated).toBe(remaining > 0 ? true : undefined);
       nextOffsets.push(enrichment.nextOffset as number | undefined);
@@ -280,7 +352,7 @@ describe('browsercompat_search_features — offset paging', () => {
     }
 
     expect(nextOffsets).toEqual([50, 100, 150, 200, 250, 300, 350, undefined]);
-    expect(new Set(seen).size).toBe(356);
+    expect(new Set(seen).size).toBe(358);
     expect(seen).toEqual(full.map((hit) => hit.row.bcd_key ?? hit.row.baseline_id));
   });
 
@@ -291,8 +363,8 @@ describe('browsercompat_search_features — offset paging', () => {
       limit: 50,
       offset: 350,
     });
-    expect(result.results).toHaveLength(6);
-    expect(getEnrichment(ctx)).toMatchObject({ totalCount: 356 });
+    expect(result.results).toHaveLength(8);
+    expect(getEnrichment(ctx)).toMatchObject({ totalCount: 358 });
     expect(getEnrichment(ctx).truncated).toBeUndefined();
     expect(getEnrichment(ctx).nextOffset).toBeUndefined();
   });
@@ -311,13 +383,13 @@ describe('browsercompat_search_features — offset paging', () => {
   });
 
   it('an offset at or past the end returns no results and a notice naming totalCount', async () => {
-    for (const offset of [356, 1000]) {
+    for (const offset of [358, 1000]) {
       const { ctx, result } = await run({ query: 'display', namespace: 'css', offset });
       expect(result.results).toEqual([]);
       const enrichment = getEnrichment(ctx);
-      expect(enrichment.totalCount).toBe(356);
+      expect(enrichment.totalCount).toBe(358);
       expect(enrichment.offsetNotice).toBe(
-        `offset ${offset} is at or past totalCount 356. Re-run with an offset below 356, or omit offset for the first page.`,
+        `offset ${offset} is at or past totalCount 358. Re-run with an offset below 358, or omit offset for the first page.`,
       );
       expect(enrichment.noMatchNotice).toBeUndefined();
       expect(enrichment.nextOffset).toBeUndefined();
@@ -338,7 +410,7 @@ describe('browsercompat_search_features — offset paging', () => {
       limit: 50,
       offset: 50,
     });
-    expect(paged.structuredContent).toMatchObject({ nextOffset: 100, totalCount: 356 });
+    expect(paged.structuredContent).toMatchObject({ nextOffset: 100, totalCount: 358 });
     expect(contentText(paged)).toContain('**nextOffset:** 100');
 
     const past = await runToolContract(browsercompatSearchFeatures, {
@@ -346,7 +418,7 @@ describe('browsercompat_search_features — offset paging', () => {
       namespace: 'css',
       offset: 400,
     });
-    expect(past.structuredContent).toMatchObject({ results: [], totalCount: 356 });
+    expect(past.structuredContent).toMatchObject({ results: [], totalCount: 358 });
     expect(contentText(past)).toContain('# 0 matches');
     expect(contentText(past)).toContain('offset 400');
   });

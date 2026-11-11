@@ -12,9 +12,9 @@ import { getBaselineService } from '@/services/baseline/baseline-service.js';
 import { BcdService, getBcdService } from '@/services/bcd/bcd-service.js';
 
 describe('BcdService — real bundled data', () => {
-  it('indexes 20,898 leaves across the 12 documented namespaces', async () => {
+  it('indexes 20,933 leaves across the 12 documented namespaces', async () => {
     const bcd = await getBcdService();
-    expect(bcd.leafCount).toBe(20_898);
+    expect(bcd.leafCount).toBe(20_933);
     expect([...bcd.namespaces]).toEqual([
       'api',
       'css',
@@ -29,9 +29,9 @@ describe('BcdService — real bundled data', () => {
       'webdriver',
       'webextensions',
     ]);
-    expect(bcd.namespaceLeafCount('api')).toBe(10_309);
-    expect(bcd.namespaceLeafCount('css')).toBe(4_291);
-    expect(bcd.namespaceLeafCount('webextensions')).toBe(2_078);
+    expect(bcd.namespaceLeafCount('api')).toBe(10_319);
+    expect(bcd.namespaceLeafCount('css')).toBe(4_303);
+    expect(bcd.namespaceLeafCount('webextensions')).toBe(2_091);
   });
 
   it('derives the reported browser set from type, never a hardcoded list (D8)', async () => {
