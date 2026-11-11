@@ -1,6 +1,6 @@
 # browser-compat-mcp-server - Directory Structure
 
-Generated on: 2026-10-26 18:08:10
+Generated on: 2026-11-11 10:22:44
 
 ```text
 browser-compat-mcp-server/
@@ -183,6 +183,8 @@ browser-compat-mcp-server/
 │   │   └── browserslist-bcd-map.test.ts
 │   ├── fuzz/
 │   │   └── tools.fuzz.test.ts
+│   ├── helpers/
+│   │   └── synthetic-targets.ts
 │   ├── integration/
 │   ├── prompts/
 │   ├── resources/

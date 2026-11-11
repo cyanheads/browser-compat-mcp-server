@@ -2,6 +2,10 @@
 
 All notable changes to this project. Each entry links to its full per-version file in [changelog/](changelog/).
 
+## [0.3.1](changelog/0.3.x/0.3.1.md) — 2026-11-11
+
+Grouped browserslist targets are judged at every release they span, usage exclusion counts only default unprefixed support and reports the prefix-recoverable share, and requested page sizes up to 1000 are honored.
+
 ## [0.3.0](changelog/0.3.x/0.3.0.md) — 2026-10-26
 
 Browser support evidence preserves uncertainty and qualifications, with a published workflow guide for project shipping decisions.
